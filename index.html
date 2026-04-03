@@ -1982,7 +1982,8 @@ function renderSatTable() {
     // ─ AMSAT health ─
     let reportText, statusBadge;
     if (report && report.count > 0) {
-      const hasNoSig = report.health && report.health.includes('no_signal');
+      // health is numeric: 1=heard, 0=no signal, null=no data
+      const hasNoSig = report.health === 0;
       const color = hasNoSig ? 'var(--color-amber)' : 'var(--color-green)';
       reportText = `<span style="color:${color}; font-size:10px;">${hasNoSig ? '⚠' : '✓'} ${report.count}</span>`;
       statusBadge = hasNoSig
