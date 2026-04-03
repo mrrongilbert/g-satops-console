@@ -1077,70 +1077,77 @@
       <div class="logo-svg-wrap">
         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="N0XRG SatOps GCC">
           <defs>
+            <!-- Granite dark coin face -->
             <radialGradient id="cBg" cx="40%" cy="35%" r="65%">
-              <stop offset="0%" stop-color="#0d1f33"/>
-              <stop offset="100%" stop-color="#050c14"/>
+              <stop offset="0%" stop-color="#3a3a3a"/>
+              <stop offset="60%" stop-color="#252525"/>
+              <stop offset="100%" stop-color="#141414"/>
+            </radialGradient>
+            <!-- Outer ring bevel -->
+            <radialGradient id="ringBg" cx="50%" cy="50%" r="50%">
+              <stop offset="75%" stop-color="#2a2a2a"/>
+              <stop offset="100%" stop-color="#4a4a4a"/>
             </radialGradient>
             <filter id="glo" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="1.4" result="b"/>
+              <feGaussianBlur stdDeviation="1.2" result="b"/>
               <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
             </filter>
-            <!-- clip to coin circle -->
             <clipPath id="coinClip">
               <circle cx="50" cy="50" r="44"/>
             </clipPath>
           </defs>
 
-          <!-- Coin background -->
-          <circle cx="50" cy="50" r="49" fill="url(#cBg)" stroke="#1e90e0" stroke-width="2"/>
-          <circle cx="50" cy="50" r="44" fill="none" stroke="#00d4ff" stroke-width="0.6" opacity="0.4"/>
+          <!-- Outer coin ring -->
+          <circle cx="50" cy="50" r="49" fill="url(#ringBg)" stroke="#888" stroke-width="1.5"/>
+          <!-- Coin face -->
+          <circle cx="50" cy="50" r="44" fill="url(#cBg)"/>
+          <!-- Inner bevel ring -->
+          <circle cx="50" cy="50" r="44" fill="none" stroke="#666" stroke-width="0.8" opacity="0.6"/>
+          <circle cx="50" cy="50" r="41" fill="none" stroke="#555" stroke-width="0.4" opacity="0.4"/>
 
-          <!-- ═══ OUTER G ═══
-               Chamfered G shape: C-open-right with mid crossbar
-               Top: 50,14 chamfer to 28,14 down-left to 14,28 down to 14,72
-               chamfer to 28,86 right to 66,86 up to 66,60 left to 50,60
-          -->
+          <!-- OUTER G — silver-grey, chamfered letterform -->
           <path d="M 50,14 L 28,14 L 14,28 L 14,72 L 28,86 L 66,86 L 66,60 L 50,60"
-            stroke="#1e90e0" stroke-width="5.5" fill="none"
+            stroke="#9a9a9a" stroke-width="5.5" fill="none"
             stroke-linejoin="miter" stroke-linecap="square"
             filter="url(#glo)" clip-path="url(#coinClip)"/>
-          <!-- Outer G top-right corner cap -->
           <line x1="50" y1="14" x2="70" y2="14"
-            stroke="#1e90e0" stroke-width="5.5" stroke-linecap="square"
+            stroke="#9a9a9a" stroke-width="5.5" stroke-linecap="square"
             filter="url(#glo)" clip-path="url(#coinClip)"/>
-          <!-- Outer G right vertical (top half only) -->
           <line x1="70" y1="14" x2="70" y2="48"
-            stroke="#1e90e0" stroke-width="5.5" stroke-linecap="square"
+            stroke="#9a9a9a" stroke-width="5.5" stroke-linecap="square"
             filter="url(#glo)" clip-path="url(#coinClip)"/>
+          <!-- Outer G highlight edge -->
+          <path d="M 50,14 L 28,14 L 14,28 L 14,72 L 28,86 L 66,86 L 66,60 L 50,60"
+            stroke="#c8c8c8" stroke-width="1" fill="none"
+            stroke-linejoin="miter" stroke-linecap="square" opacity="0.4"
+            clip-path="url(#coinClip)"/>
 
-          <!-- ═══ INNER G ═══
-               Smaller G nested inside, offset toward center
-          -->
+          <!-- INNER G — lighter silver, nested -->
           <path d="M 44,26 L 28,26 L 22,32 L 22,68 L 28,74 L 56,74 L 56,52 L 44,52"
-            stroke="#00d4ff" stroke-width="3.5" fill="none"
+            stroke="#b8b8b8" stroke-width="3.5" fill="none"
             stroke-linejoin="miter" stroke-linecap="square"
-            opacity="0.85" clip-path="url(#coinClip)"/>
-          <!-- Inner G top-right cap -->
-          <line x1="44" y1="26" x2="62" y2="26"
-            stroke="#00d4ff" stroke-width="3.5" stroke-linecap="square" opacity="0.85"
             clip-path="url(#coinClip)"/>
-          <!-- Inner G right vertical -->
+          <line x1="44" y1="26" x2="62" y2="26"
+            stroke="#b8b8b8" stroke-width="3.5" stroke-linecap="square"
+            clip-path="url(#coinClip)"/>
           <line x1="62" y1="26" x2="62" y2="40"
-            stroke="#00d4ff" stroke-width="3.5" stroke-linecap="square" opacity="0.85"
+            stroke="#b8b8b8" stroke-width="3.5" stroke-linecap="square"
+            clip-path="url(#coinClip)"/>
+          <!-- Inner G bright highlight -->
+          <path d="M 44,26 L 28,26 L 22,32 L 22,68 L 28,74 L 56,74 L 56,52 L 44,52"
+            stroke="#e0e0e0" stroke-width="0.8" fill="none"
+            stroke-linejoin="miter" stroke-linecap="square" opacity="0.5"
             clip-path="url(#coinClip)"/>
 
-          <!-- ═══ LIGHTNING BOLT ═══
-               Slashes diagonally bottom-right through both G shapes
-               Matches original: top-right angled head, mid kink, bottom-left tail
-          -->
+          <!-- LIGHTNING BOLT — silver-white with bright edge -->
           <path d="M 72,42 L 56,64 L 68,64 L 50,88"
-            stroke="#ffa500" stroke-width="5" fill="none"
+            stroke="#aaaaaa" stroke-width="5" fill="none"
             stroke-linecap="round" stroke-linejoin="round"
             filter="url(#glo)" clip-path="url(#coinClip)"/>
           <path d="M 72,42 L 56,64 L 68,64 L 50,88"
-            stroke="#ffd066" stroke-width="2" fill="none"
+            stroke="#e8e8e8" stroke-width="1.8" fill="none"
             stroke-linecap="round" stroke-linejoin="round"
-            opacity="0.55" clip-path="url(#coinClip)"/>
+            opacity="0.7" clip-path="url(#coinClip)"/>
         </svg>
       </div>
       <div class="topbar-title">
