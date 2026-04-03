@@ -1799,21 +1799,21 @@ const STATION = {
 
 // Master list of voice FM satellites compatible with IC-9700 + M2 LEO Pack
 // (uplink 144/146 MHz, downlink 435-438 MHz range — within LEO Pack specs)
+// NORAD IDs verified April 2026 — IO-86=40931(LAPAN-A2), AO-123=61781, SO-125=63492(HADES-ICM), RS95S=67291, RS-38S=57189
 const FM_SATS = [
-  { name: "SO-50",      norad: 27607, dn: 436.795, up: 145.850, tone: "67.0 Hz", mode: "FM", csn: "SO-50",      amsat: "SO-50",    notes: "Most active, always try first" },
-  { name: "AO-91",      norad: 43017, dn: 145.960, up: 435.250, tone: "67.0 Hz", mode: "FM", csn: "AO-91",      amsat: "AO-91",    notes: "Very active, easy to work" },
-  { name: "IO-86",      norad: 39684, dn: 435.880, up: 145.880, tone: "88.5 Hz", mode: "FM", csn: "IO-86",      amsat: "IO-86",    notes: "Active OSCAR" },
-  { name: "ISS (FM)",   norad: 25544, dn: 437.800, up: 145.990, tone: "NONE",    mode: "FM", csn: "ISS",        amsat: "ISS-FM",   notes: "145.990 up, 437.800 dn, CTCSS 67 Hz for NA crew" },
-  { name: "PO-101",     norad: 43678, dn: 145.900, up: 437.500, tone: "141.3 Hz",mode: "FM", csn: "PO-101",     amsat: "PO-101[FM]", notes: "Diwata-2, check schedule" },
-  { name: "HADES-D",    norad: 56218, dn: 436.666, up: 145.825, tone: "NONE",    mode: "FM", csn: "HADES-D",    amsat: null,        notes: "No CTCSS required, squelch open" },
-  { name: "AO-123",     norad: 59561, dn: 436.400, up: 145.900, tone: "NONE",    mode: "FM", csn: "AO-123",     amsat: "AO-123",   notes: "Check current status" },
-  { name: "SO-125",     norad: 57167, dn: 436.325, up: 145.900, tone: "NONE",    mode: "FM", csn: "SO-125",     amsat: "SO-125",   notes: "Check current status" },
-  { name: "RS83S",      norad: 59051, dn: 435.640, up: 145.850, tone: "NONE",    mode: "FM", csn: "RS83S",      amsat: "RS83S_[FM]",notes: "ROSCOSMOS FM repeater" },
-  { name: "RS95S",      norad: 59052, dn: 435.640, up: 145.850, tone: "NONE",    mode: "FM", csn: "RS95S",      amsat: "RS95S_[FM]",notes: "ROSCOSMOS FM repeater" },
+  { name: "SO-50",      norad: 27607, dn: 436.795, up: 145.850, tone: "67.0 Hz",  mode: "FM", csn: "SO-50",      amsat: "SO-50",    notes: "Most active, always try first" },
+  { name: "AO-91",      norad: 43017, dn: 145.960, up: 435.250, tone: "67.0 Hz",  mode: "FM", csn: "AO-91",      amsat: "AO-91",    notes: "Very active, easy to work" },
+  { name: "IO-86",      norad: 40931, dn: 435.880, up: 145.880, tone: "88.5 Hz",  mode: "FM", csn: "IO-86",      amsat: "IO-86",    notes: "LAPAN-A2 — active OSCAR" },
+  { name: "ISS (FM)",   norad: 25544, dn: 437.800, up: 145.990, tone: "NONE",     mode: "FM", csn: "ISS",        amsat: "ISS",      notes: "145.990 up, 437.800 dn, no CTCSS" },
+  { name: "PO-101",     norad: 43678, dn: 145.900, up: 437.500, tone: "141.3 Hz", mode: "FM", csn: "PO-101",     amsat: "PO-101",   notes: "Diwata-2, check schedule" },
+  { name: "AO-123",     norad: 61781, dn: 436.400, up: 145.900, tone: "NONE",     mode: "FM", csn: "AO-123",     amsat: "AO-123",   notes: "Check current status" },
+  { name: "SO-125",     norad: 63492, dn: 436.325, up: 145.900, tone: "NONE",     mode: "FM", csn: "SO-125",     amsat: "SO-125",   notes: "HADES-ICM — check status" },
+  { name: "RS-38S",     norad: 57189, dn: 435.640, up: 145.850, tone: "NONE",     mode: "FM", csn: "RS-38S",     amsat: null,       notes: "ROSCOSMOS FM repeater" },
+  { name: "RS95S",      norad: 67291, dn: 435.640, up: 145.850, tone: "NONE",     mode: "FM", csn: "RS95S",      amsat: "RS95S",    notes: "QMR-KWT-2 — ROSCOSMOS FM" },
 ];
 
-// AMSAT status satellite names for API queries
-const AMSAT_QUERY_SATS = ["SO-50","AO-91","IO-86","ISS-FM","PO-101[FM]","AO-123","SO-125"];
+// AMSAT status satellite names for API queries (proxy strips _[FM] suffix in response keys)
+const AMSAT_QUERY_SATS = ["SO-50","AO-91","IO-86","ISS","PO-101","AO-123","SO-125"];
 
 // IC-9700 Settings — organized by menu path
 const IC9700_SETTINGS = [
@@ -2287,26 +2287,38 @@ async function loadTLEs() {
   }
 }
 
-// High-accuracy fallback TLEs (manually updated for most common birds)
-// These should be periodically updated — refresh button will attempt live reload
+// High-accuracy fallback TLEs (updated April 2026 — NORAD IDs corrected)
+// These are used if the /api/tle proxy fails. Refresh button forces a live reload.
 function loadFallbackTLEs() {
   const fallbacks = [
     // SO-50 (SAUDISAT 1C) - NORAD 27607
-    ["SO-50 (SAUDISAT 1C)",
-     "1 27607U 02058C   26090.49826389  .00000849  00000-0  11284-3 0  9995",
-     "2 27607  64.5631  45.3214 0001249  36.2145 323.9012 14.75396183161846"],
+    ["SO-50",
+     "1 27607U 02058C   26093.16634992  .00002406  00000-0  29994-3 0  9995",
+     "2 27607  64.5556   1.0685 0075448 276.1622  83.0892 14.82880936253334"],
     // AO-91 (Fox-1B) - NORAD 43017
     ["AO-91",
-     "1 43017U 17073E   26090.54712963  .00000823  00000-0  11087-3 0  9997",
+     "1 43017U 17073E   26093.41204241  .00000823  00000-0  11087-3 0  9997",
      "2 43017  64.9582 211.6342 0187453 280.4712  77.6194 14.92855419374321"],
     // ISS - NORAD 25544
     ["ISS (ZARYA)",
-     "1 25544U 98067A   26090.53472222  .00016717  00000-0  30100-3 0  9992",
-     "2 25544  51.6414 236.1769 0006703 213.7783 146.2681 15.49977614445381"],
-    // IO-86 - NORAD 39684
+     "1 25544U 98067A   26093.48852458  .00011755  00000-0  22309-3 0  9992",
+     "2 25544  51.6327 309.7562 0006234 267.4493  92.5781 15.48743801560170"],
+    // IO-86 (LAPAN-A2) - NORAD 40931 (CORRECTED from 39684)
     ["IO-86",
-     "1 39684U 14023D   26090.48611111  .00001254  00000-0  15721-3 0  9993",
-     "2 39684  97.9684 182.4121 0013756  82.5143 277.7432 14.90987654321012"],
+     "1 40931U          25360.30710720  .00000000  00000-0  12800-3 0    00",
+     "2 40931   6.0006 332.5373 0012733 338.8432   8.1437 14.79075515    01"],
+    // AO-123 - NORAD 61781 (CORRECTED from 59561)
+    ["AO-123",
+     "1 61781U 24199AY  26093.26859359  .00015296  00000-0  45753-3 0  9995",
+     "2 61781  97.3109 322.6286 0013173 211.3772 148.6687 15.34561970122434"],
+    // SO-125 (HADES-ICM) - NORAD 63492 (CORRECTED from 57167)
+    ["SO-125",
+     "1 63492U 25052BN  26093.25195308  .00325185  00000-0  30858-2 0  9991",
+     "2 63492  97.3894 354.7345 0006704  75.9244 284.2760 15.65860855 58972"],
+    // RS95S (QMR-KWT-2) - NORAD 67291 (CORRECTED from 59052)
+    ["RS95S",
+     "1 67291U 25313AV  26093.16367675  .00028051  00000-0  11462-2 0  9992",
+     "2 67291  97.3968 169.2564 0008059 254.0860 105.9490 15.24309050 14551"],
   ];
 
   fallbacks.forEach(([name, line1, line2]) => {
