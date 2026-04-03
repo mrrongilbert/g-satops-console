@@ -1,0 +1,76 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Clean API route aliases for Netlify Functions
+# These map /api/... → /.netlify/functions/...-proxy
+[[redirects]]
+  from = "/api/amsat"
+  to = "/.netlify/functions/amsat-proxy"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/amsat/*"
+  to = "/.netlify/functions/amsat-proxy/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/tle"
+  to = "/.netlify/functions/tle-proxy"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/tle/*"
+  to = "/.netlify/functions/tle-proxy/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/satnogs"
+  to = "/.netlify/functions/satnogs-proxy"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/satnogs/*"
+  to = "/.netlify/functions/satnogs-proxy/:splat"
+  status = 200
+  force = true
+
+# SPA fallback — serve index.html for all unmatched routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security + performance headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/netlify/functions/*"
+  [headers.values]
+    Cache-Control = "public, max-age=180"
