@@ -1267,7 +1267,10 @@
                   <th>DOWNLINK (MHz)</th>
                   <th>UPLINK (MHz)</th>
                   <th>CTCSS</th>
-                  <th>MODE</th>
+                  <th>TOT — UTC / CDT</th>
+                  <th>TIME UNTIL</th>
+                  <th>MAX EL</th>
+                  <th>ON STATION</th>
                   <th>STATUS</th>
                   <th>AMSAT REPORT</th>
                 </tr>
@@ -1920,10 +1923,7 @@ function renderSatTable() {
   const tbody = document.getElementById('sat-table-body');
   if (!tbody) return;
 
-  let sats = FM_SATS;
-  if (currentFilter === 'active') {
-    sats = FM_SATS; // All in our curated list are voice-capable
-  }
+  let sats = [...FM_SATS];
   if (searchTerm) {
     const s = searchTerm.toLowerCase();
     sats = sats.filter(sat => sat.name.toLowerCase().includes(s) || String(sat.norad).includes(s));
@@ -1931,27 +1931,107 @@ function renderSatTable() {
 
   document.getElementById('kpi-fm-active').textContent = FM_SATS.length;
 
-  tbody.innerHTML = sats.map(sat => {
+  // CDT offset: UTC-5 (CDT) — Central Daylight Time
+  const CDT_OFFSET_MS = -5 * 60 * 60 * 1000;
+
+  // Helper: format a Date as HH:MM
+  function fmtUTC(d)  { return d ? d.toUTCString().slice(17,22) : '—'; }
+  function fmtCDT(d)  {
+    if (!d) return '—';
+    const cdt = new Date(d.getTime() + CDT_OFFSET_MS);
+    return cdt.toUTCString().slice(17,22);
+  }
+  function fmtDur(ms) {
+    if (!ms || ms <= 0) return '—';
+    const m = Math.floor(ms / 60000);
+    const s = Math.round((ms % 60000) / 1000);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+  function fmtUntil(ms) {
+    if (!ms || ms <= 0) return '<span style="color:var(--color-green);font-weight:700">▶ NOW</span>';
+    const totalMin = Math.floor(ms / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  // Attach next-pass data to each sat from the global passes array
+  const now = new Date();
+  sats = sats.map(sat => {
+    // Find the next upcoming pass for this sat
+    const nextPass = (window.passResults || []).find(
+      p => p.norad === sat.norad && new Date(p.set) > now
+    );
+    return { ...sat, _pass: nextPass || null };
+  });
+
+  // Sort: sats with a known next pass first, by TOT time; no-pass sats at bottom
+  sats.sort((a, b) => {
+    if (!a._pass && !b._pass) return 0;
+    if (!a._pass) return 1;
+    if (!b._pass) return -1;
+    const ta = a._pass.tot ? new Date(a._pass.tot) : new Date(a._pass.rise);
+    const tb = b._pass.tot ? new Date(b._pass.tot) : new Date(b._pass.rise);
+    return ta - tb;
+  });
+
+  tbody.innerHTML = sats.map((sat, idx) => {
     const report = amsatData[sat.amsat];
-    // Derive health color from AMSAT proxy data
+    const p = sat._pass;
+
+    // ─ AMSAT health ─
     let reportText, statusBadge;
     if (report && report.count > 0) {
       const hasNoSig = report.health && report.health.includes('no_signal');
       const color = hasNoSig ? 'var(--color-amber)' : 'var(--color-green)';
-      const icon = hasNoSig ? '⚠' : '✓';
-      reportText = `<span style="color:${color}; font-size:10px;">${icon} ${report.count} report(s)</span>`;
+      reportText = `<span style="color:${color}; font-size:10px;">${hasNoSig ? '⚠' : '✓'} ${report.count}</span>`;
       statusBadge = hasNoSig
-        ? `<span class="status-badge" style="color:var(--color-amber); background:rgba(255,165,0,.12); border-color:rgba(255,165,0,.3)">● INTERMIT</span>`
+        ? `<span class="status-badge" style="color:var(--color-amber);background:rgba(255,165,0,.12);border-color:rgba(255,165,0,.3)">● INTERMIT</span>`
         : `<span class="status-badge active">● ACTIVE</span>`;
-    } else if (report && report.count === 0) {
-      reportText = `<span style="color:var(--color-text-faint); font-size:10px;">No recent reports</span>`;
-      statusBadge = `<span class="status-badge active">● ACTIVE</span>`;
     } else {
       reportText = `<span class="text-faint" style="font-size:10px;">—</span>`;
       statusBadge = `<span class="status-badge active">● ACTIVE</span>`;
     }
+
+    // ─ Pass columns ─
+    let totCell = '<span style="color:var(--color-text-faint);font-size:10px;">No pass data</span>';
+    let untilCell = '<span style="color:var(--color-text-faint);">-</span>';
+    let maxElCell = '<span style="color:var(--color-text-faint);">-</span>';
+    let tosCell = '<span style="color:var(--color-text-faint);">-</span>';
+
+    if (p) {
+      const totDate  = p.tot  ? new Date(p.tot)  : new Date(p.rise);
+      const tosEndDate = p.tosEnd ? new Date(p.tosEnd) : null;
+      const isActive = new Date(p.rise) <= now && new Date(p.set) >= now;
+      const msUntil  = totDate - now;
+
+      // TOT: UTC / CDT
+      const totUtc = fmtUTC(totDate);
+      const totCdt = fmtCDT(totDate);
+      const totColor = isActive ? 'var(--color-green)' : 'var(--color-cyan)';
+      totCell = `<div style="font-family:var(--font-mono);font-size:11px;color:${totColor};font-weight:600;">${totUtc}Z</div>
+                 <div style="font-family:var(--font-mono);font-size:10px;color:var(--color-text-muted);">${totCdt} CDT</div>`;
+
+      // Time until
+      untilCell = `<span style="font-family:var(--font-mono);font-size:12px;color:${isActive ? 'var(--color-green)' : 'var(--color-text-primary);'}">${fmtUntil(isActive ? 0 : msUntil)}</span>`;
+
+      // Max elevation
+      const elColor = p.maxEl > 50 ? 'var(--color-green)' : p.maxEl > 20 ? 'var(--color-cyan)' : 'var(--color-amber)';
+      maxElCell = `<span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:${elColor};">${Math.round(p.maxEl)}°</span>`;
+
+      // TOS (time above 10°)
+      if (tosEndDate && p.tot) {
+        const tosDur = tosEndDate - new Date(p.tot);
+        tosCell = `<span style="font-family:var(--font-mono);font-size:12px;color:var(--color-green);font-weight:600;">${fmtDur(tosDur)}</span>`;
+      } else if (p.tot && p.set) {
+        tosCell = `<span style="font-family:var(--font-mono);font-size:11px;color:var(--color-text-muted);">${fmtDur(new Date(p.set) - new Date(p.tot))}</span>`;
+      }
+    }
+
     const toneDisplay = sat.tone !== 'NONE' ? `<span class="ctcss-val">${sat.tone}</span>` : `<span class="text-faint">NONE</span>`;
-    return `<tr data-norad="${sat.norad}" onclick="selectSat('${sat.name}', ${sat.norad}, ${sat.dn}, ${sat.up}, '${sat.tone}')">
+    const rowStyle = idx === 0 && sat._pass ? 'border-left: 2px solid var(--color-cyan);' : '';
+
+    return `<tr data-norad="${sat.norad}" style="${rowStyle}" onclick="selectSat('${sat.name}', ${sat.norad}, ${sat.dn}, ${sat.up}, '${sat.tone}')">
       <td>
         <div class="sat-name">${sat.name}</div>
         <div class="sat-norad">NORAD #${sat.norad}</div>
@@ -1959,13 +2039,15 @@ function renderSatTable() {
       <td><span class="freq-val">${sat.dn.toFixed(3)}</span></td>
       <td><span class="freq-val freq-up">${sat.up.toFixed(3)}</span></td>
       <td>${toneDisplay}</td>
-      <td><span class="font-mono" style="color: var(--color-text-muted);">${sat.mode}</span></td>
+      <td>${totCell}</td>
+      <td>${untilCell}</td>
+      <td>${maxElCell}</td>
+      <td>${tosCell}</td>
       <td>${statusBadge}</td>
       <td>${reportText}</td>
     </tr>`;
   }).join('');
 
-  // Also update CSN grid
   renderCsnGrid(sats);
 }
 
@@ -2351,8 +2433,12 @@ async function computePasses() {
     passes.sort((a, b) => a.rise - b.rise);
   }
 
+  // Expose passes globally so Active Birds tab can sort/display them
+  window.passResults = passes;
+
   renderPasses();
   renderSkyCanvas();
+  renderSatTable(); // Re-render Active Birds with pass data sorted
 
   // Update next pass KPI
   if (passes.length > 0) {
