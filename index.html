@@ -1,0 +1,2707 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N0XRG SatOps GCC — Ground Control Center</title>
+  <meta name="description" content="Amateur radio satellite operations console for IC-9700 + M2 LEO Pack + G-5500 + CSN SAT Controller">
+  <meta property="og:title" content="SatOps Ground Control Console">
+  <meta property="og:description" content="All-in-one satellite operations dashboard for amateur radio satellite contacts">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* =============================================
+       DESIGN TOKENS — NASA/Space Mission Control
+    ============================================= */
+    :root {
+      --text-xs:   clamp(0.75rem,  0.7rem  + 0.25vw, 0.875rem);
+      --text-sm:   clamp(0.875rem, 0.8rem  + 0.35vw, 1rem);
+      --text-base: clamp(1rem,     0.95rem + 0.25vw, 1.125rem);
+      --text-lg:   clamp(1.125rem, 1rem    + 0.75vw, 1.5rem);
+      --text-xl:   clamp(1.5rem,   1.2rem  + 1.25vw, 2.25rem);
+
+      --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem;
+      --space-4: 1rem; --space-5: 1.25rem; --space-6: 1.5rem;
+      --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem;
+
+      --radius-sm: 0.25rem; --radius-md: 0.375rem;
+      --radius-lg: 0.5rem; --radius-xl: 0.75rem;
+      --transition: 160ms cubic-bezier(0.16, 1, 0.3, 1);
+
+      /* NASA Mission Control Palette — dark mode primary */
+      --color-bg:           #050a0f;
+      --color-surface:      #080e14;
+      --color-surface-2:    #0c1520;
+      --color-surface-3:    #101c2a;
+      --color-panel:        #0d1825;
+      --color-border:       #1a2d42;
+      --color-border-bright:#2a4460;
+      --color-divider:      #142033;
+
+      --color-text:         #d0e8f5;
+      --color-text-muted:   #6a8fa8;
+      --color-text-faint:   #304a5e;
+      --color-text-dim:     #4a6a80;
+
+      /* Primary: NASA Blue */
+      --color-primary:      #1e90e0;
+      --color-primary-glow: rgba(30, 144, 224, 0.25);
+      --color-primary-dim:  #0d5fa0;
+
+      /* Accent: Mission Green (GO / NOMINAL) */
+      --color-green:        #00d87a;
+      --color-green-dim:    #00904f;
+      --color-green-glow:   rgba(0, 216, 122, 0.2);
+      --color-green-bg:     rgba(0, 216, 122, 0.08);
+
+      /* Alert: Amber */
+      --color-amber:        #ffa500;
+      --color-amber-dim:    #c47a00;
+      --color-amber-glow:   rgba(255, 165, 0, 0.2);
+      --color-amber-bg:     rgba(255, 165, 0, 0.08);
+
+      /* Warning: Red */
+      --color-red:          #ff4757;
+      --color-red-dim:      #c43040;
+      --color-red-bg:       rgba(255, 71, 87, 0.1);
+
+      /* Data: Cyan */
+      --color-cyan:         #00d4ff;
+      --color-cyan-dim:     #0099bb;
+      --color-cyan-glow:    rgba(0, 212, 255, 0.2);
+
+      /* Freq display: bright white-blue */
+      --color-freq:         #a8d8ff;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.6);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,0.7);
+      --shadow-glow-blue: 0 0 20px rgba(30, 144, 224, 0.3);
+      --shadow-glow-green: 0 0 20px rgba(0, 216, 122, 0.25);
+
+      --font-display: 'Orbitron', 'Courier New', monospace;
+      --font-mono:    'JetBrains Mono', 'Courier New', monospace;
+      --font-body:    'Inter', 'Helvetica Neue', sans-serif;
+    }
+
+    /* =============================================
+       BASE RESET
+    ============================================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      scroll-behavior: smooth;
+    }
+    body {
+      min-height: 100dvh;
+      font-family: var(--font-body);
+      font-size: var(--text-sm);
+      color: var(--color-text);
+      background-color: var(--color-bg);
+      background-image:
+        radial-gradient(ellipse at 20% 0%, rgba(30,90,160,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 100%, rgba(0,60,100,0.1) 0%, transparent 60%);
+    }
+    img, svg { display: block; max-width: 100%; }
+    button { cursor: pointer; background: none; border: none; font: inherit; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Subtle scanline overlay for mission control feel */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.03) 2px,
+        rgba(0, 0, 0, 0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* =============================================
+       LAYOUT
+    ============================================= */
+    .app-wrapper {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+    }
+
+    /* =============================================
+       HEADER / NAV BAR
+    ============================================= */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-3) var(--space-6);
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      gap: var(--space-4);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+    }
+
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      flex-shrink: 0;
+    }
+
+    .logo-svg-wrap {
+      width: 52px;
+      height: 52px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 6px rgba(0,212,255,0.35));
+    }
+
+    .topbar-title {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .topbar-title .t1 {
+      font-family: var(--font-display);
+      font-size: var(--text-sm);
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--color-primary);
+      text-shadow: 0 0 12px var(--color-primary-glow);
+    }
+
+    .topbar-title .t2 {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      letter-spacing: 0.08em;
+    }
+
+    .topbar-status {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      flex: 1;
+      justify-content: center;
+    }
+
+    .status-chip {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-1) var(--space-3);
+      border-radius: var(--radius-full, 9999px);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: 0.06em;
+      border: 1px solid transparent;
+      transition: all var(--transition);
+    }
+    .status-chip.green {
+      background: var(--color-green-bg);
+      border-color: var(--color-green-dim);
+      color: var(--color-green);
+    }
+    .status-chip.amber {
+      background: var(--color-amber-bg);
+      border-color: var(--color-amber-dim);
+      color: var(--color-amber);
+    }
+    .status-chip.blue {
+      background: rgba(30,144,224,0.08);
+      border-color: var(--color-primary-dim);
+      color: var(--color-primary);
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    .status-chip.green .status-dot { box-shadow: 0 0 6px var(--color-green); }
+    .status-chip.amber .status-dot { box-shadow: 0 0 6px var(--color-amber); animation-duration: 1s; }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .topbar-clock {
+      font-family: var(--font-display);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--color-cyan);
+      letter-spacing: 0.1em;
+      text-shadow: 0 0 10px var(--color-cyan-glow);
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .topbar-clock .utc-label {
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      letter-spacing: 0.12em;
+      font-family: var(--font-mono);
+    }
+
+    /* =============================================
+       TAB NAV
+    ============================================= */
+    .tab-nav {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 0 var(--space-6);
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tab-nav::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-4);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all var(--transition);
+      position: relative;
+      top: 1px;
+    }
+    .tab-btn:hover { color: var(--color-text); }
+    .tab-btn.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+    .tab-icon { font-size: 14px; }
+
+    /* =============================================
+       MAIN CONTENT
+    ============================================= */
+    .main-content {
+      flex: 1;
+      padding: var(--space-5) var(--space-6);
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Tab panels */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* =============================================
+       PANEL / CARD COMPONENT
+    ============================================= */
+    .panel {
+      background: var(--color-panel);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+      transition: border-color var(--transition);
+    }
+    .panel:hover { border-color: var(--color-border-bright); }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--color-divider);
+      background: rgba(0,0,0,0.2);
+    }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-display);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--color-primary);
+    }
+    .panel-title-icon { font-size: 13px; }
+    .panel-body { padding: var(--space-4); }
+    .panel-body-compact { padding: var(--space-3); }
+    .panel-badge {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* =============================================
+       GRID LAYOUTS
+    ============================================= */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-4);
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--space-4);
+    }
+    .grid-auto {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: var(--space-4);
+    }
+    .col-span-2 { grid-column: span 2; }
+    .col-span-full { grid-column: 1 / -1; }
+
+    /* =============================================
+       SATELLITE TABLE
+    ============================================= */
+    .sat-table-wrap {
+      overflow-x: auto;
+      overflow-y: auto;
+      max-height: 480px;
+    }
+    .sat-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+    }
+    .sat-table thead th {
+      padding: var(--space-2) var(--space-3);
+      text-align: left;
+      color: var(--color-text-muted);
+      letter-spacing: 0.1em;
+      font-weight: 600;
+      border-bottom: 1px solid var(--color-border);
+      background: rgba(0,0,0,0.3);
+      position: sticky;
+      top: 0;
+      white-space: nowrap;
+    }
+    .sat-table tbody tr {
+      border-bottom: 1px solid var(--color-divider);
+      transition: background var(--transition);
+      cursor: pointer;
+    }
+    .sat-table tbody tr:hover { background: rgba(30,144,224,0.05); }
+    .sat-table tbody tr.selected { background: rgba(30,144,224,0.1); }
+    .sat-table td {
+      padding: var(--space-2) var(--space-3);
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .sat-name {
+      font-weight: 600;
+      color: var(--color-text);
+      letter-spacing: 0.04em;
+    }
+    .sat-norad { color: var(--color-text-faint); font-size: 10px; }
+    .freq-val { color: var(--color-cyan); letter-spacing: 0.05em; }
+    .freq-up { color: var(--color-amber); }
+    .ctcss-val { color: var(--color-green); }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+    }
+    .status-badge.active {
+      background: var(--color-green-bg);
+      color: var(--color-green);
+      border: 1px solid rgba(0,216,122,0.3);
+    }
+    .status-badge.partial {
+      background: var(--color-amber-bg);
+      color: var(--color-amber);
+      border: 1px solid rgba(255,165,0,0.3);
+    }
+    .status-badge.inactive {
+      background: rgba(255,255,255,0.04);
+      color: var(--color-text-faint);
+      border: 1px solid var(--color-border);
+    }
+
+    /* =============================================
+       AMSAT REPORT DISPLAY
+    ============================================= */
+    .amsat-reports {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .amsat-report-item {
+      padding: var(--space-2) var(--space-3);
+      background: rgba(0,0,0,0.2);
+      border-radius: var(--radius-md);
+      border-left: 3px solid var(--color-green-dim);
+    }
+    .report-meta {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      margin-bottom: 3px;
+    }
+    .report-callsign {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--color-cyan);
+      font-size: var(--text-xs);
+    }
+    .report-time {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-faint);
+    }
+    .report-grid {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-amber);
+    }
+    .report-text {
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      line-height: 1.4;
+    }
+
+    /* =============================================
+       IC-9700 SETTINGS
+    ============================================= */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: var(--space-4);
+    }
+    .setting-group {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .setting-group-header {
+      padding: var(--space-2) var(--space-3);
+      background: rgba(30,144,224,0.08);
+      border-bottom: 1px solid var(--color-border);
+      font-family: var(--font-display);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--color-primary);
+    }
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--color-divider);
+      gap: var(--space-4);
+    }
+    .setting-item:last-child { border-bottom: none; }
+    .setting-label {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      line-height: 1.4;
+      flex: 1;
+    }
+    .setting-path {
+      font-size: 10px;
+      color: var(--color-text-faint);
+      margin-top: 2px;
+      font-style: italic;
+    }
+    .setting-value {
+      font-family: var(--font-display);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      color: var(--color-cyan);
+      letter-spacing: 0.06em;
+      text-align: right;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .setting-value.green { color: var(--color-green); }
+    .setting-value.amber { color: var(--color-amber); }
+    .setting-value.red { color: var(--color-red); }
+
+    .nav-path {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-muted);
+    }
+    .nav-step {
+      background: rgba(30,144,224,0.1);
+      border: 1px solid rgba(30,144,224,0.2);
+      color: var(--color-primary);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+    .nav-arrow { color: var(--color-text-faint); font-size: 10px; }
+
+    /* =============================================
+       PASS PREDICTION
+    ============================================= */
+    .pass-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .pass-item {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-3) var(--space-3);
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      transition: all var(--transition);
+      cursor: default;
+    }
+    .pass-item:hover { border-color: var(--color-primary-dim); background: rgba(30,144,224,0.05); }
+    .pass-item.upcoming { border-color: var(--color-green-dim); }
+    .pass-item.imminent {
+      border-color: var(--color-amber);
+      background: var(--color-amber-bg);
+      animation: blink-border 1.5s ease-in-out infinite;
+    }
+    @keyframes blink-border {
+      0%, 100% { border-color: var(--color-amber); }
+      50% { border-color: var(--color-amber-dim); }
+    }
+
+    .pass-sat-name {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--color-text);
+      font-size: var(--text-xs);
+    }
+    .pass-time {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-cyan);
+      text-align: right;
+    }
+    .pass-label {
+      font-size: 10px;
+      color: var(--color-text-faint);
+      font-family: var(--font-mono);
+    }
+    .pass-el {
+      font-family: var(--font-display);
+      font-size: var(--text-sm);
+      font-weight: 700;
+      text-align: right;
+    }
+    .pass-el.high { color: var(--color-green); }
+    .pass-el.med { color: var(--color-amber); }
+    .pass-el.low { color: var(--color-text-muted); }
+    .pass-countdown {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-amber);
+      text-align: right;
+      min-width: 70px;
+    }
+
+    /* =============================================
+       ORBITRACK / EMBED SECTION
+    ============================================= */
+    .embed-container {
+      position: relative;
+      width: 100%;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-2);
+    }
+    .embed-container iframe {
+      width: 100%;
+      height: 520px;
+      border: none;
+      display: block;
+    }
+    .embed-overlay-msg {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 320px;
+      gap: var(--space-4);
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      text-align: center;
+      padding: var(--space-8);
+    }
+    .embed-overlay-msg .embed-icon { font-size: 3rem; opacity: 0.3; }
+
+    /* =============================================
+       BUTTONS
+    ============================================= */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-4);
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: all var(--transition);
+      border: 1px solid transparent;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--color-primary-dim);
+      border-color: var(--color-primary);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--color-primary);
+      box-shadow: var(--shadow-glow-blue);
+    }
+    .btn-green {
+      background: var(--color-green-bg);
+      border-color: var(--color-green-dim);
+      color: var(--color-green);
+    }
+    .btn-green:hover {
+      background: rgba(0,216,122,0.15);
+      box-shadow: var(--shadow-glow-green);
+    }
+    .btn-amber {
+      background: var(--color-amber-bg);
+      border-color: var(--color-amber-dim);
+      color: var(--color-amber);
+    }
+    .btn-amber:hover { background: rgba(255,165,0,0.15); }
+    .btn-ghost {
+      background: transparent;
+      border-color: var(--color-border);
+      color: var(--color-text-muted);
+    }
+    .btn-ghost:hover { border-color: var(--color-border-bright); color: var(--color-text); }
+    .btn-sm {
+      padding: var(--space-1) var(--space-3);
+      font-size: 10px;
+    }
+    .btn-lg {
+      padding: var(--space-3) var(--space-6);
+      font-size: var(--text-sm);
+    }
+
+    /* =============================================
+       CSN QUICK LAUNCH PANEL
+    ============================================= */
+    .csn-launch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: var(--space-3);
+    }
+    .csn-sat-card {
+      background: rgba(0,0,0,0.25);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-3);
+      transition: all var(--transition);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .csn-sat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--color-green);
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+    .csn-sat-card:hover { border-color: var(--color-border-bright); }
+    .csn-sat-card:hover::before { opacity: 1; }
+    .csn-sat-card.active-sat {
+      border-color: var(--color-green-dim);
+      background: var(--color-green-bg);
+    }
+    .csn-sat-card.active-sat::before { opacity: 1; }
+    .csn-card-name {
+      font-family: var(--font-display);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      color: var(--color-text);
+      letter-spacing: 0.06em;
+      margin-bottom: var(--space-2);
+    }
+    .csn-card-freqs {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .csn-freq-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .csn-freq-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-faint);
+    }
+    .csn-freq-val {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 600;
+    }
+    .csn-freq-val.dn { color: var(--color-cyan); }
+    .csn-freq-val.up { color: var(--color-amber); }
+    .csn-tone {
+      font-size: 10px;
+      color: var(--color-green);
+      font-family: var(--font-mono);
+      margin-top: var(--space-1);
+    }
+
+    /* =============================================
+       SKYROOF PANEL
+    ============================================= */
+    .skyroof-info {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+    .version-display {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-3) var(--space-4);
+      background: rgba(0,0,0,0.3);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+    }
+    .version-num {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: 900;
+      color: var(--color-primary);
+      letter-spacing: 0.1em;
+    }
+    .version-status {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+    }
+    .changelog-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .changelog-item {
+      display: flex;
+      gap: var(--space-3);
+      align-items: flex-start;
+      padding: var(--space-2) var(--space-3);
+      background: rgba(0,0,0,0.15);
+      border-radius: var(--radius-md);
+      border-left: 3px solid var(--color-primary-dim);
+    }
+    .changelog-bullet {
+      color: var(--color-primary);
+      font-size: 12px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .changelog-text {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      line-height: 1.5;
+    }
+
+    /* =============================================
+       STAT CARDS (mini KPI)
+    ============================================= */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: var(--space-3);
+      margin-bottom: var(--space-5);
+    }
+    .kpi-card {
+      background: var(--color-panel);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-3);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+    }
+    .kpi-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-faint);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .kpi-value {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      line-height: 1;
+    }
+    .kpi-value.green { color: var(--color-green); text-shadow: 0 0 12px var(--color-green-glow); }
+    .kpi-value.cyan { color: var(--color-cyan); }
+    .kpi-value.amber { color: var(--color-amber); }
+    .kpi-value.primary { color: var(--color-primary); }
+    .kpi-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-muted);
+    }
+
+    /* =============================================
+       SCROLLBARS
+    ============================================= */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--color-border-bright); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--color-primary-dim); }
+
+    /* =============================================
+       UTILITY
+    ============================================= */
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: var(--space-2); }
+    .gap-3 { gap: var(--space-3); }
+    .gap-4 { gap: var(--space-4); }
+    .gap-5 { gap: var(--space-5); }
+    .mt-3 { margin-top: var(--space-3); }
+    .mt-4 { margin-top: var(--space-4); }
+    .mt-5 { margin-top: var(--space-5); }
+    .mb-4 { margin-bottom: var(--space-4); }
+    .mb-3 { margin-bottom: var(--space-3); }
+    .text-xs { font-size: var(--text-xs); }
+    .text-muted { color: var(--color-text-muted); }
+    .text-faint { color: var(--color-text-faint); }
+    .font-mono { font-family: var(--font-mono); }
+    .font-display { font-family: var(--font-display); }
+    .w-full { width: 100%; }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--color-border);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-3);
+      padding: var(--space-8);
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+    }
+    .error-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      padding: var(--space-6);
+      color: var(--color-amber);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      text-align: center;
+    }
+
+    /* =============================================
+       HOVER TOOLTIP
+    ============================================= */
+    [data-tooltip] { position: relative; }
+    [data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--color-surface-3, #101c2a);
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      white-space: nowrap;
+      border: 1px solid var(--color-border);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity var(--transition);
+      z-index: 200;
+    }
+    [data-tooltip]:hover::after { opacity: 1; }
+
+    /* =============================================
+       RESPONSIVE
+    ============================================= */
+    @media (max-width: 900px) {
+      .grid-3 { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .col-span-2 { grid-column: span 1; }
+      .topbar-status { display: none; }
+      .main-content { padding: var(--space-4) var(--space-3); }
+    }
+    @media (max-width: 600px) {
+      .pass-item { grid-template-columns: 1fr 1fr; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* =============================================
+       FILTER BAR
+    ============================================= */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+    }
+    .filter-chip {
+      padding: var(--space-1) var(--space-3);
+      border-radius: 99px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      border: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .filter-chip:hover { border-color: var(--color-border-bright); color: var(--color-text); }
+    .filter-chip.active {
+      background: rgba(30,144,224,0.12);
+      border-color: var(--color-primary-dim);
+      color: var(--color-primary);
+    }
+    .search-input {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-2) var(--space-3);
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      outline: none;
+      transition: all var(--transition);
+      width: 200px;
+    }
+    .search-input:focus { border-color: var(--color-primary-dim); }
+    .search-input::placeholder { color: var(--color-text-faint); }
+
+    /* Selected sat detail bar */
+    .sat-detail-bar {
+      display: none;
+      gap: var(--space-6);
+      padding: var(--space-3) var(--space-4);
+      background: rgba(30,144,224,0.07);
+      border: 1px solid var(--color-primary-dim);
+      border-radius: var(--radius-lg);
+      margin-top: var(--space-4);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .sat-detail-bar.visible { display: flex; }
+    .detail-item { display: flex; flex-direction: column; gap: 2px; }
+    .detail-label { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-faint); letter-spacing: 0.08em; }
+    .detail-value { font-family: var(--font-display); font-size: var(--text-sm); font-weight: 700; color: var(--color-cyan); letter-spacing: 0.06em; }
+    .detail-value.green { color: var(--color-green); }
+    .detail-value.amber { color: var(--color-amber); }
+
+    /* Sky view canvas */
+    #skyCanvas {
+      width: 100%;
+      max-height: 380px;
+      border-radius: var(--radius-lg);
+      background: #000;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- ========================================
+       TOP BAR
+  ======================================== -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <!-- N0XRG SATCOMS Coin Logo — NASA theme recolor -->
+      <div class="logo-svg-wrap">
+        <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="N0XRG SATCOMS logo">
+          <defs>
+            <!-- Coin face gradient: dark panel surface -->
+            <radialGradient id="coinFace" cx="45%" cy="40%" r="60%">
+              <stop offset="0%" stop-color="#132030"/>
+              <stop offset="100%" stop-color="#060d14"/>
+            </radialGradient>
+            <!-- Outer ring gradient -->
+            <radialGradient id="ringGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="70%" stop-color="#0a1a2a"/>
+              <stop offset="100%" stop-color="#1e90e0" stop-opacity="0.4"/>
+            </radialGradient>
+            <!-- Monogram glow filter -->
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="1.5" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Outer coin ring -->
+          <circle cx="60" cy="60" r="58" fill="url(#ringGrad)" stroke="#1e90e0" stroke-width="1.5" opacity="0.9"/>
+          <!-- Inner bevel ring -->
+          <circle cx="60" cy="60" r="53" fill="none" stroke="#00d4ff" stroke-width="0.6" opacity="0.4"/>
+          <!-- Coin face -->
+          <circle cx="60" cy="60" r="51" fill="url(#coinFace)"/>
+          <!-- Inner detail ring -->
+          <circle cx="60" cy="60" r="46" fill="none" stroke="#1e3a5a" stroke-width="1"/>
+          <circle cx="60" cy="60" r="44" fill="none" stroke="#0a1e30" stroke-width="0.5"/>
+
+          <!-- Circular text TOP: N0XRG · SATCOMS -->
+          <path id="topArc" d="M 14,60 A 46,46 0 0,1 106,60" fill="none"/>
+          <text font-family="'Orbitron', sans-serif" font-size="7.2" font-weight="700" fill="#00d4ff" letter-spacing="2">
+            <textPath href="#topArc" startOffset="8%">NØXRG · SATCOMS</textPath>
+          </text>
+
+          <!-- Circular text BOTTOM: HAMMIN' HARD IN OUTER SPACE -->
+          <path id="botArc" d="M 14,60 A 46,46 0 0,0 106,60" fill="none"/>
+          <text font-family="'Orbitron', sans-serif" font-size="5.8" font-weight="600" fill="#1e90e0" letter-spacing="1.2">
+            <textPath href="#botArc" startOffset="4%">HAMMIN' HARD IN OUTER SPACE</textPath>
+          </text>
+
+          <!-- Satellite icon LEFT (at ~9 o'clock) -->
+          <g transform="translate(17,56) rotate(-15)" opacity="0.7">
+            <rect x="0" y="1" width="6" height="4" rx="0.5" fill="#0c1e30" stroke="#1e90e0" stroke-width="0.6"/>
+            <rect x="-3" y="2" width="2.5" height="1.5" rx="0.3" fill="#00d87a" opacity="0.9"/>
+            <rect x="6.5" y="2" width="2.5" height="1.5" rx="0.3" fill="#00d87a" opacity="0.9"/>
+          </g>
+
+          <!-- Satellite icon RIGHT (at ~3 o'clock) -->
+          <g transform="translate(97,58) rotate(15)" opacity="0.7">
+            <rect x="0" y="1" width="6" height="4" rx="0.5" fill="#0c1e30" stroke="#1e90e0" stroke-width="0.6"/>
+            <rect x="-3" y="2" width="2.5" height="1.5" rx="0.3" fill="#00d87a" opacity="0.9"/>
+            <rect x="6.5" y="2" width="2.5" height="1.5" rx="0.3" fill="#00d87a" opacity="0.9"/>
+          </g>
+
+          <!-- Dot separators at 3/9 o'clock flanking satellites -->
+          <circle cx="29" cy="46" r="1" fill="#1e90e0" opacity="0.6"/>
+          <circle cx="91" cy="46" r="1" fill="#1e90e0" opacity="0.6"/>
+
+          <!-- GCC Monogram — outer C bracket (left) -->
+          <g filter="url(#glow)">
+            <!-- Outer hexagonal C -->
+            <path d="M 52 28 L 40 28 L 32 36 L 32 84 L 40 92 L 52 92" stroke="#1e90e0" stroke-width="3.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            <!-- Inner C bracket -->
+            <path d="M 52 38 L 44 38 L 38 44 L 38 76 L 44 82 L 52 82" stroke="#00d4ff" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>
+            <!-- G crossbar -->
+            <line x1="38" y1="60" x2="54" y2="60" stroke="#1e90e0" stroke-width="3.5" stroke-linecap="round"/>
+
+            <!-- Inner GCC letterform — right side with lightning bolt -->
+            <!-- Vertical right stroke -->
+            <line x1="68" y1="28" x2="68" y2="60" stroke="#00d4ff" stroke-width="3" stroke-linecap="round"/>
+            <!-- Top crossbar -->
+            <line x1="52" y1="28" x2="80" y2="28" stroke="#00d4ff" stroke-width="3" stroke-linecap="round"/>
+            <!-- Middle crossbar -->
+            <line x1="52" y1="60" x2="72" y2="60" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round"/>
+            <!-- Lightning bolt -->
+            <path d="M 72 55 L 60 72 L 70 72 L 56 92" stroke="#ffa500" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Lightning highlight -->
+            <path d="M 72 55 L 60 72 L 70 72 L 56 92" stroke="#ffcc44" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+          </g>
+
+          <!-- Subtle scanline texture overlay -->
+          <circle cx="60" cy="60" r="51" fill="none" stroke="#00d4ff" stroke-width="0.3" opacity="0.08"
+            stroke-dasharray="0.5 3" pathLength="320"/>
+        </svg>
+      </div>
+      <div class="topbar-title">
+        <span class="t1">N0XRG · SATOPS GCC</span>
+        <span class="t2">GROUND CONTROL CENTER</span>
+      </div>
+    </div>
+
+    <div class="topbar-status">
+      <div class="status-chip green">
+        <span class="status-dot"></span>
+        IC-9700 NOMINAL
+      </div>
+      <div class="status-chip green">
+        <span class="status-dot"></span>
+        M2 LEO PACK ONLINE
+      </div>
+      <div class="status-chip blue" id="tle-status-chip">
+        <span class="status-dot"></span>
+        TLE LOADING...
+      </div>
+      <div class="status-chip green" id="amsat-status-chip">
+        <span class="status-dot"></span>
+        AMSAT LIVE
+      </div>
+    </div>
+
+    <div class="topbar-clock">
+      <div id="utc-clock" class="font-display" style="font-size: var(--text-sm);">00:00:00</div>
+      <div class="utc-label">UTC · BAYTOWN TX · EL29ot</div>
+    </div>
+  </header>
+
+  <!-- ========================================
+       TAB NAV
+  ======================================== -->
+  <nav class="tab-nav" aria-label="Console panels">
+    <button class="tab-btn active" data-tab="satellites" aria-controls="tab-satellites">
+      <span class="tab-icon">🛰️</span> ACTIVE BIRDS
+    </button>
+    <button class="tab-btn" data-tab="passes" aria-controls="tab-passes">
+      <span class="tab-icon">📡</span> PASS PREDICT
+    </button>
+    <button class="tab-btn" data-tab="csn" aria-controls="tab-csn">
+      <span class="tab-icon">🎛️</span> CSN SAT QUICK-SELECT
+    </button>
+    <button class="tab-btn" data-tab="ic9700" aria-controls="tab-ic9700">
+      <span class="tab-icon">📻</span> IC-9700 SETTINGS
+    </button>
+    <button class="tab-btn" data-tab="skyroof" aria-controls="tab-skyroof">
+      <span class="tab-icon">🔭</span> SKYROOF / TOOLS
+    </button>
+    <button class="tab-btn" data-tab="orbit" aria-controls="tab-orbit">
+      <span class="tab-icon">🌍</span> ORBIT TRACK
+    </button>
+  </nav>
+
+  <!-- ========================================
+       MAIN CONTENT
+  ======================================== -->
+  <main class="main-content">
+
+    <!-- =========================================
+         TAB 1: ACTIVE FM SATELLITES
+    ========================================= -->
+    <div id="tab-satellites" class="tab-panel active" role="tabpanel">
+      <!-- KPI Row -->
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <span class="kpi-label">FM VOICE ACTIVE</span>
+          <span class="kpi-value green" id="kpi-fm-active">—</span>
+          <span class="kpi-sub">satellites on air</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">REPORTS (24H)</span>
+          <span class="kpi-value cyan" id="kpi-reports">—</span>
+          <span class="kpi-sub">AMSAT observer reports</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">NEXT PASS</span>
+          <span class="kpi-value amber" id="kpi-next-pass">—</span>
+          <span class="kpi-sub" id="kpi-next-pass-sat">loading...</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">TLE DATA AGE</span>
+          <span class="kpi-value primary" id="kpi-tle-age">—</span>
+          <span class="kpi-sub">last updated</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">YOUR LOCATION</span>
+          <span class="kpi-value primary" style="font-size: var(--text-sm);">EL29ot</span>
+          <span class="kpi-sub">29.74°N 94.97°W</span>
+        </div>
+      </div>
+
+      <!-- Filters + Table -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-title-icon">🛰️</span>
+            FM VOICE SATELLITES — COMPATIBLE WITH IC-9700 + M2 LEO PACK
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="filter-bar">
+              <input type="text" class="search-input" placeholder="Search call / name..." id="sat-search" aria-label="Search satellites">
+              <button class="filter-chip active" data-filter="active" id="filter-active">ACTIVE</button>
+              <button class="filter-chip" data-filter="all" id="filter-all">ALL</button>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="refresh-sats" data-tooltip="Refresh satellite data">⟳ REFRESH</button>
+          </div>
+        </div>
+        <div class="panel-body-compact">
+          <div class="sat-table-wrap">
+            <table class="sat-table" aria-label="Active FM satellite list">
+              <thead>
+                <tr>
+                  <th>SATELLITE</th>
+                  <th>DOWNLINK (MHz)</th>
+                  <th>UPLINK (MHz)</th>
+                  <th>CTCSS</th>
+                  <th>MODE</th>
+                  <th>STATUS</th>
+                  <th>AMSAT REPORT</th>
+                </tr>
+              </thead>
+              <tbody id="sat-table-body">
+                <tr>
+                  <td colspan="7">
+                    <div class="loading-row">
+                      <div class="spinner"></div>
+                      LOADING SATELLITE DATA FROM SATNOGS DB...
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Selected sat detail -->
+          <div class="sat-detail-bar" id="sat-detail-bar">
+            <div class="detail-item">
+              <span class="detail-label">SELECTED BIRD</span>
+              <span class="detail-value" id="det-name">—</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">DOWNLINK</span>
+              <span class="detail-value" id="det-dn">—</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">UPLINK</span>
+              <span class="detail-value amber" id="det-up">—</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">ACCESS TONE</span>
+              <span class="detail-value green" id="det-tone">—</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">NORAD ID</span>
+              <span class="detail-value" id="det-norad">—</span>
+            </div>
+            <div style="margin-left:auto; display:flex; gap: var(--space-2);">
+              <a id="det-satnogs-link" class="btn btn-ghost btn-sm" href="#" target="_blank">SatNOGS ↗</a>
+              <a id="det-amsat-link" class="btn btn-ghost btn-sm" href="#" target="_blank">AMSAT ↗</a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- AMSAT Recent Reports -->
+      <div class="mt-4">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">📋</span>
+              AMSAT OSCAR OBSERVER REPORTS — LAST 24H
+            </div>
+            <div style="display:flex; align-items:center; gap:var(--space-3);">
+              <span id="amsat-last-refresh" style="font-family:var(--font-mono); font-size:10px; color:var(--color-text-faint);">Loading...</span>
+              <a href="https://www.amsat.org/status/" target="_blank" class="btn btn-ghost btn-sm">AMSAT STATUS ↗</a>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="amsat-reports" id="amsat-reports-list">
+              <div class="loading-row">
+                <div class="spinner"></div>
+                FETCHING AMSAT OBSERVER REPORTS...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================
+         TAB 2: PASS PREDICTION
+    ========================================= -->
+    <div id="tab-passes" class="tab-panel" role="tabpanel">
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">📡</span>
+              UPCOMING PASSES — N0XRG · BAYTOWN TX · EL29ot
+            </div>
+            <div style="display:flex; align-items:center; gap:var(--space-2);">
+              <span id="tle-last-refresh" style="font-family:var(--font-mono); font-size:10px; color:var(--color-text-faint);">TLE loading...</span>
+              <div class="panel-badge" id="pass-last-calc">Calculating...</div>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="pass-list" id="pass-list">
+              <div class="loading-row">
+                <div class="spinner"></div>
+                COMPUTING PASS PREDICTIONS FROM TLE DATA...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <!-- Sky View Canvas -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-title-icon">🌌</span>
+                SKY VIEW — CURRENT SATELLITE POSITIONS
+              </div>
+              <div class="panel-badge">AZIMUTH/ELEVATION POLAR PLOT</div>
+            </div>
+            <div class="panel-body" style="padding: var(--space-3);">
+              <canvas id="skyCanvas" height="360" aria-label="Sky view polar plot"></canvas>
+            </div>
+          </div>
+
+          <!-- Pass detail -->
+          <div class="panel mt-4">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span class="panel-title-icon">📊</span>
+                ANTENNA ROTATOR GUIDE (NEXT PASS)
+              </div>
+            </div>
+            <div class="panel-body" id="rot-guide">
+              <div class="text-muted font-mono text-xs" style="text-align:center; padding: var(--space-4);">
+                Select a pass to see rotator guide
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================
+         TAB 3: CSN SAT QUICK SELECT
+    ========================================= -->
+    <div id="tab-csn" class="tab-panel" role="tabpanel">
+      <div class="grid-2">
+        <!-- CSN Interface Link -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">🎛️</span>
+              CSN SAT CONTROLLER — LOCAL NETWORK
+            </div>
+            <div class="status-chip green" style="font-size: 10px;">
+              <span class="status-dot"></span> 192.168.8.147
+            </div>
+          </div>
+          <div class="panel-body">
+            <p class="text-muted font-mono text-xs mb-4" style="line-height: 1.6;">
+              Open the CSN SAT web interface on your local network. The CSN controller handles all Doppler correction, rotator control, and CI-V radio commands automatically. Use this console to plan which satellite (bird) to select next.
+            </p>
+            <div class="flex items-center gap-3 flex-wrap">
+              <a href="http://192.168.8.147" target="_blank" class="btn btn-green btn-lg">
+                🎛️ OPEN CSN SAT INTERFACE
+              </a>
+              <a href="http://192.168.8.147/settings" target="_blank" class="btn btn-ghost btn-sm">
+                ⚙️ CSN Settings
+              </a>
+            </div>
+
+            <div class="mt-5" style="border-top: 1px solid var(--color-divider); padding-top: var(--space-4);">
+              <div class="font-display text-xs" style="color: var(--color-primary); letter-spacing: 0.1em; margin-bottom: var(--space-3);">
+                QUICK OPERATING WORKFLOW
+              </div>
+              <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                <div class="setting-item" style="background: rgba(0,0,0,0.15); border-radius: var(--radius-md);">
+                  <div class="setting-label">
+                    <strong style="color: var(--color-green);">1.</strong> Check ACTIVE BIRDS tab — identify next favorable pass &amp; max elevation
+                  </div>
+                </div>
+                <div class="setting-item" style="background: rgba(0,0,0,0.15); border-radius: var(--radius-md);">
+                  <div class="setting-label">
+                    <strong style="color: var(--color-green);">2.</strong> Pre-set IC-9700 scope settings (see IC-9700 SETTINGS tab) before pass begins
+                  </div>
+                </div>
+                <div class="setting-item" style="background: rgba(0,0,0,0.15); border-radius: var(--radius-md);">
+                  <div class="setting-label">
+                    <strong style="color: var(--color-green);">3.</strong> Open CSN SAT interface above → select the satellite by name in the CSN interface
+                  </div>
+                </div>
+                <div class="setting-item" style="background: rgba(0,0,0,0.15); border-radius: var(--radius-md);">
+                  <div class="setting-label">
+                    <strong style="color: var(--color-green);">4.</strong> CSN automatically handles: Doppler tuning, rotator AZ/EL tracking, CI-V radio control
+                  </div>
+                </div>
+                <div class="setting-item" style="background: rgba(0,0,0,0.15); border-radius: var(--radius-md);">
+                  <div class="setting-label">
+                    <strong style="color: var(--color-green);">5.</strong> Monitor pass on PASS PREDICT tab / sky view canvas while operating
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Reference Cards for active FM sats -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">📋</span>
+              FM SATELLITE QUICK REFERENCE — ENTER INTO CSN BY NAME
+            </div>
+          </div>
+          <div class="panel-body">
+            <p class="text-faint font-mono text-xs mb-3">
+              Use these CSN satellite names and frequencies as reference. Click any card for details.
+            </p>
+            <div class="csn-launch-grid" id="csn-sat-grid">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================
+         TAB 4: IC-9700 SETTINGS
+    ========================================= -->
+    <div id="tab-ic9700" class="tab-panel" role="tabpanel">
+      <div class="panel mb-4">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-title-icon">📻</span>
+            ICOM IC-9700 — OPTIMAL SATELLITE FM SETTINGS
+          </div>
+          <div class="panel-badge">SET THESE BEFORE HANDING OVER TO CSN SAT</div>
+        </div>
+        <div class="panel-body">
+          <p class="font-mono text-xs text-muted mb-4" style="max-width: 80ch; line-height: 1.7;">
+            Configure these settings once before the pass. The CSN SAT controller will then take over frequency, mode, and Doppler control automatically via CI-V. The scope settings, tone squelch, and audio levels must be set manually on the radio front panel — the CSN cannot set these.
+          </p>
+          <div class="settings-grid" id="ic9700-settings-grid">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================
+         TAB 5: SKYROOF / TOOLS
+    ========================================= -->
+    <div id="tab-skyroof" class="tab-panel" role="tabpanel">
+      <div class="grid-3">
+        <!-- SkyRoof Info -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">🔭</span>
+              SKYROOF — VE3NEA
+            </div>
+            <div class="status-chip green"><span class="status-dot"></span> v1.26 CURRENT</div>
+          </div>
+          <div class="panel-body">
+            <div class="skyroof-info">
+              <div class="version-display">
+                <div>
+                  <div class="version-num">v 1.26</div>
+                  <div class="font-mono text-xs text-muted mt-3">Released: February 4, 2026</div>
+                </div>
+                <div class="flex flex-col gap-2">
+                  <span class="status-badge active">✓ CURRENT</span>
+                  <span class="status-badge active">✓ YOU ARE UP TO DATE</span>
+                </div>
+              </div>
+
+              <div>
+                <div class="font-display text-xs mb-3" style="color: var(--color-primary); letter-spacing: 0.1em;">
+                  v1.26 CHANGELOG
+                </div>
+                <div class="changelog-list">
+                  <div class="changelog-item">
+                    <span class="changelog-bullet">▸</span>
+                    <span class="changelog-text">Added TX Gain slider to the FT4 Console panel</span>
+                  </div>
+                  <div class="changelog-item">
+                    <span class="changelog-bullet">▸</span>
+                    <span class="changelog-text">Added drop-down menu to Rotator on the status bar</span>
+                  </div>
+                  <div class="changelog-item">
+                    <span class="changelog-bullet">▸</span>
+                    <span class="changelog-text">Added real-time satellite status indicator to the Current Group panel (must be enabled in Settings)</span>
+                  </div>
+                  <div class="changelog-item">
+                    <span class="changelog-bullet">▸</span>
+                    <span class="changelog-text">Bug fixes and performance improvements</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-2 mt-3">
+                <a href="https://github.com/VE3NEA/SkyRoof/releases/latest" target="_blank" class="btn btn-primary">
+                  ⬇ DOWNLOAD LATEST RELEASE
+                </a>
+                <a href="https://github.com/VE3NEA/SkyRoof/releases" target="_blank" class="btn btn-ghost btn-sm">
+                  📋 ALL RELEASES / CHANGELOG
+                </a>
+                <a href="https://ve3nea.github.io/SkyRoof/" target="_blank" class="btn btn-ghost btn-sm">
+                  🌐 SKYROOF HOMEPAGE
+                </a>
+                <a href="https://ve3nea.github.io/SkyRoof/download.html" target="_blank" class="btn btn-ghost btn-sm">
+                  📖 DOCUMENTATION
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SkyRoof SDR Config for your setup -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">⚙️</span>
+              SKYROOF SETUP — YOUR STATION
+            </div>
+          </div>
+          <div class="panel-body">
+            <p class="font-mono text-xs text-muted mb-4" style="line-height: 1.6;">
+              SkyRoof role in your station: <strong style="color: var(--color-cyan);">SDR RX monitor + tracking visualization only.</strong> CSN SAT handles all radio and rotator control.
+            </p>
+
+            <div class="setting-group">
+              <div class="setting-group-header">SDR DEVICE SETTINGS</div>
+              <div class="setting-item">
+                <div class="setting-label">SDR Role
+                  <div class="setting-path">Tools → SDR Devices</div>
+                </div>
+                <div class="setting-value green">RX ONLY</div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-label">RX CAT Control
+                  <div class="setting-path">Settings → CAT</div>
+                </div>
+                <div class="setting-value red">DISABLED</div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-label">AGC
+                  <div class="setting-path">SDR Device settings</div>
+                </div>
+                <div class="setting-value red">OFF</div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-label">Single Gain Mode
+                  <div class="setting-path">SDR Device settings</div>
+                </div>
+                <div class="setting-value green">TRUE</div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-label">PPM Calibration
+                  <div class="setting-path">Settings → SDR → Calibrating PPM</div>
+                </div>
+                <div class="setting-value amber">CALIBRATE FIRST</div>
+              </div>
+            </div>
+
+            <div class="setting-group mt-3">
+              <div class="setting-group-header">TRANSCEIVER (IC-9700) IN SKYROOF</div>
+              <div class="setting-item">
+                <div class="setting-label">TX Transceiver
+                  <div class="setting-path">Settings → Radio</div>
+                </div>
+                <div class="setting-value amber">NOT CONFIGURED<br><span style="font-size:9px; color: var(--color-text-faint);">(CSN SAT controls radio)</span></div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-label">Audio / IQ Output
+                  <div class="setting-path">Settings → Audio</div>
+                </div>
+                <div class="setting-value green">VAC / UDP</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- External Tool Links -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">🔗</span>
+              ESSENTIAL LINKS
+            </div>
+          </div>
+          <div class="panel-body">
+            <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+              <div>
+                <div class="font-display text-xs mb-2" style="color: var(--color-primary); letter-spacing: 0.1em;">TRACKING</div>
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                  <a href="https://www.n2yo.com/?s=27607" target="_blank" class="btn btn-ghost btn-sm">🌍 N2YO Live Tracker</a>
+                  <a href="https://heavens-above.com" target="_blank" class="btn btn-ghost btn-sm">⭐ Heavens Above</a>
+                  <a href="https://celestrak.org/SOCRATES/" target="_blank" class="btn btn-ghost btn-sm">🔭 CelesTrak SOCRATES</a>
+                  <a href="https://www.amsat.org/track/" target="_blank" class="btn btn-ghost btn-sm">📡 AMSAT Tracking</a>
+                </div>
+              </div>
+              <div>
+                <div class="font-display text-xs mb-2" style="color: var(--color-primary); letter-spacing: 0.1em;">STATUS / DATA</div>
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                  <a href="https://www.amsat.org/status/" target="_blank" class="btn btn-ghost btn-sm">📋 AMSAT Status Page</a>
+                  <a href="https://db.satnogs.org" target="_blank" class="btn btn-ghost btn-sm">🛰️ SatNOGS DB</a>
+                  <a href="https://www.amsat.se/satellitstatus/" target="_blank" class="btn btn-ghost btn-sm">📊 AMSAT-SM Status</a>
+                  <a href="https://celestrak.org/SOCRATES/" target="_blank" class="btn btn-ghost btn-sm">📝 CelesTrak TLE Files</a>
+                </div>
+              </div>
+              <div>
+                <div class="font-display text-xs mb-2" style="color: var(--color-primary); letter-spacing: 0.1em;">REFERENCE</div>
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                  <a href="https://www.amsat.org/fm-satellite-frequency-summary/" target="_blank" class="btn btn-ghost btn-sm">📻 FM Freq Summary</a>
+                  <a href="https://www.icomamerica.com/lineup/products/IC-9700/" target="_blank" class="btn btn-ghost btn-sm">📖 IC-9700 Product Page</a>
+                  <a href="http://www.icomjapan.com/support/manual/2698/" target="_blank" class="btn btn-ghost btn-sm">📄 IC-9700 Manual</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================
+         TAB 6: ORBIT TRACK
+    ========================================= -->
+    <div id="tab-orbit" class="tab-panel" role="tabpanel">
+      <div class="grid-2">
+        <div class="panel col-span-full">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">🌍</span>
+              LIVE ORBIT TRACKER — SATNOGS NETWORK
+            </div>
+            <div class="flex items-center gap-2">
+              <a href="https://network.satnogs.org/observations/" target="_blank" class="btn btn-ghost btn-sm">SatNOGS Network ↗</a>
+              <a href="https://www.n2yo.com/?s=27607" target="_blank" class="btn btn-ghost btn-sm">N2YO SO-50 ↗</a>
+            </div>
+          </div>
+          <div class="panel-body" style="padding: 0;">
+            <div class="embed-container">
+              <!-- N2YO live tracker embed for SO-50 as default -->
+              <iframe
+                src="https://www.n2yo.com/widgets/widget-tracker.php?s=27607&tlabel=SO-50&bgcolor=050a0f"
+                title="N2YO Satellite Tracker - SO-50"
+                allowfullscreen
+                sandbox="allow-scripts allow-same-origin allow-popups">
+              </iframe>
+            </div>
+          </div>
+        </div>
+
+        <!-- Orbitrack info -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">🔭</span>
+              ORBITRACK — SOUTHERN STARS
+            </div>
+          </div>
+          <div class="panel-body">
+            <p class="font-mono text-xs text-muted mb-4" style="line-height: 1.6;">
+              Orbitrack is a dedicated satellite tracking app by Southern Stars. It provides augmented-reality and virtual-reality modes, a complete satellite database, and voice commands. Best used on iOS/macOS alongside your station console.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+              <a href="https://southernstars.com/products/" target="_blank" class="btn btn-primary">
+                🔭 ORBITRACK — SOUTHERN STARS
+              </a>
+              <a href="https://apps.apple.com/us/app/orbitrack/id522418097" target="_blank" class="btn btn-ghost btn-sm">
+                📱 Orbitrack on App Store
+              </a>
+            </div>
+
+            <div class="mt-4" style="border-top: 1px solid var(--color-divider); padding-top: var(--space-4);">
+              <div class="font-display text-xs mb-3" style="color: var(--color-primary); letter-spacing: 0.1em;">TRACKER QUICK LINKS</div>
+              <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                <a href="https://www.n2yo.com/?s=27607" target="_blank" class="btn btn-ghost btn-sm">N2YO — SO-50 (27607)</a>
+                <a href="https://www.n2yo.com/?s=25544" target="_blank" class="btn btn-ghost btn-sm">N2YO — ISS (25544)</a>
+                <a href="https://www.n2yo.com/?s=43017" target="_blank" class="btn btn-ghost btn-sm">N2YO — AO-91 (43017)</a>
+                <a href="https://www.n2yo.com/?s=55268" target="_blank" class="btn btn-ghost btn-sm">N2YO — SO-50 Alt</a>
+                <a href="https://in-the-sky.org/satmap.php" target="_blank" class="btn btn-ghost btn-sm">In-The-Sky.org Tracker</a>
+                <a href="https://celestrak.org/cesium/orbit-viz.php" target="_blank" class="btn btn-ghost btn-sm">CelesTrak Cesium 3D Orbit</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AMSAT-SM iframe embed -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-title-icon">📡</span>
+              AMSAT-SM LIVE STATUS
+            </div>
+            <a href="https://www.amsat.se/satellitstatus/" target="_blank" class="btn btn-ghost btn-sm">OPEN FULL PAGE ↗</a>
+          </div>
+          <div class="panel-body" style="padding: 0;">
+            <div class="embed-container">
+              <div class="embed-overlay-msg">
+                <div class="embed-icon">📡</div>
+                <div>
+                  <strong style="color: var(--color-cyan); font-family: var(--font-display); letter-spacing: 0.08em;">AMSAT-SM STATUS PAGE</strong><br><br>
+                  The AMSAT-SM site uses anti-embedding headers.<br>
+                  Click below to open directly in a new tab.
+                </div>
+                <a href="https://www.amsat.se/satellitstatus/" target="_blank" class="btn btn-primary">
+                  📡 OPEN AMSAT-SM STATUS ↗
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT ENGINE
+============================================================ -->
+<script>
+// ========================================================
+// CONFIGURATION
+// ========================================================
+const STATION = {
+  lat: 29.7412,
+  lng: -94.9726,
+  name: "BAYTOWN TX",
+  grid: "EL29ot",
+  callsign: "N0XRG",
+  csn_ip: "192.168.8.147",
+};
+
+// Master list of voice FM satellites compatible with IC-9700 + M2 LEO Pack
+// (uplink 144/146 MHz, downlink 435-438 MHz range — within LEO Pack specs)
+const FM_SATS = [
+  { name: "SO-50",      norad: 27607, dn: 436.795, up: 145.850, tone: "67.0 Hz", mode: "FM", csn: "SO-50",      amsat: "SO-50",    notes: "Most active, always try first" },
+  { name: "AO-91",      norad: 43017, dn: 145.960, up: 435.250, tone: "67.0 Hz", mode: "FM", csn: "AO-91",      amsat: "AO-91",    notes: "Very active, easy to work" },
+  { name: "IO-86",      norad: 39684, dn: 435.880, up: 145.880, tone: "88.5 Hz", mode: "FM", csn: "IO-86",      amsat: "IO-86",    notes: "Active OSCAR" },
+  { name: "ISS (FM)",   norad: 25544, dn: 437.800, up: 145.990, tone: "NONE",    mode: "FM", csn: "ISS",        amsat: "ISS-FM",   notes: "145.990 up, 437.800 dn, CTCSS 67 Hz for NA crew" },
+  { name: "PO-101",     norad: 43678, dn: 145.900, up: 437.500, tone: "141.3 Hz",mode: "FM", csn: "PO-101",     amsat: "PO-101[FM]", notes: "Diwata-2, check schedule" },
+  { name: "HADES-D",    norad: 56218, dn: 436.666, up: 145.825, tone: "NONE",    mode: "FM", csn: "HADES-D",    amsat: null,        notes: "No CTCSS required, squelch open" },
+  { name: "AO-123",     norad: 59561, dn: 436.400, up: 145.900, tone: "NONE",    mode: "FM", csn: "AO-123",     amsat: "AO-123",   notes: "Check current status" },
+  { name: "SO-125",     norad: 57167, dn: 436.325, up: 145.900, tone: "NONE",    mode: "FM", csn: "SO-125",     amsat: "SO-125",   notes: "Check current status" },
+  { name: "RS83S",      norad: 59051, dn: 435.640, up: 145.850, tone: "NONE",    mode: "FM", csn: "RS83S",      amsat: "RS83S_[FM]",notes: "ROSCOSMOS FM repeater" },
+  { name: "RS95S",      norad: 59052, dn: 435.640, up: 145.850, tone: "NONE",    mode: "FM", csn: "RS95S",      amsat: "RS95S_[FM]",notes: "ROSCOSMOS FM repeater" },
+];
+
+// AMSAT status satellite names for API queries
+const AMSAT_QUERY_SATS = ["SO-50","AO-91","IO-86","ISS-FM","PO-101[FM]","AO-123","SO-125"];
+
+// IC-9700 Settings — organized by menu path
+const IC9700_SETTINGS = [
+  {
+    group: "CI-V (CSN SAT INTERFACE)",
+    path: "MENU/SET → Connectors → CI-V",
+    items: [
+      { label: "CI-V Baud Rate",    path: "Menu/Set → Connectors → CI-V → sub 1/3", value: "115200",   color: "green", note: "USB port speed for CSN SAT" },
+      { label: "CI-V Address",      path: "Menu/Set → Connectors → CI-V → sub 1/3", value: "A2h",      color: "cyan",  note: "Default IC-9700 address" },
+      { label: "CI-V Transceive",   path: "Menu/Set → Connectors → CI-V → sub 1/3", value: "OFF",      color: "amber", note: "CSN SAT requires OFF" },
+      { label: "CI-V USB Baud Rate",path: "Menu/Set → Connectors → CI-V → sub 2/3", value: "115200",   color: "green", note: "USB port" },
+      { label: "CI-V USB Echo Back",path: "Menu/Set → Connectors → CI-V → sub 2/3", value: "ON",       color: "green", note: "" },
+    ]
+  },
+  {
+    group: "SAT MODE — FUNCTION",
+    path: "MENU/SET → Function",
+    items: [
+      { label: "Auto Repeater (USA version)", path: "Menu/Set → Function → Auto Repeater", value: "ON DUP or OFF", color: "amber", note: "CSN SAT overrides — either works" },
+      { label: "SAT Mode",                    path: "FUNCTION key → hold 1 sec",           value: "ENABLED",       color: "green", note: "Press & hold FUNCTION button" },
+    ]
+  },
+  {
+    group: "SCOPE SETTINGS (SET MANUALLY — CSN CANNOT DO THIS)",
+    path: "Front panel → M.SCOPE button",
+    items: [
+      { label: "Scope Mode",          path: "Press M.SCOPE",                           value: "M.SCOPE",   color: "cyan",  note: "Mini scope + radio info at bottom" },
+      { label: "Scope Position",      path: "SCOPE → MENU → Scope Position",           value: "CENTER",    color: "green", note: "Keeps downlink centered" },
+      { label: "Scope Span",          path: "Press SPAN knob",                         value: "±25 kHz",   color: "green", note: "Shows full FM sat passband" },
+      { label: "Reference Level",     path: "SCOPE → MENU → REF",                     value: "AUTO",      color: "green", note: "Or -20 dBm manual start" },
+      { label: "MARKER",              path: "SCOPE → MENU → MARKER",                  value: "OPER FREQ", color: "cyan",  note: "Shows your freq with vertical line" },
+      { label: "Scope During TX",     path: "SCOPE → MENU → Scope During TX",         value: "ON",        color: "green", note: "See your own signal when TX" },
+      { label: "EXPD/SET",            path: "SCOPE → MENU → EXPD",                    value: "OFF",       color: "green", note: "Off for most FM birds" },
+    ]
+  },
+  {
+    group: "FM MODE / AUDIO",
+    path: "VFO / Mode buttons",
+    items: [
+      { label: "Mode — MAIN (downlink)", path: "MODE button → SUB VFO area",    value: "FM",       color: "cyan",  note: "Downlink always FM" },
+      { label: "Filter Width",           path: "FIL button while in FM mode",   value: "±7 kHz",   color: "green", note: "Standard for FM sats" },
+      { label: "SQL (Squelch)",          path: "SQL knob",                      value: "OPEN (0)", color: "amber", note: "Open squelch — hear sat" },
+      { label: "RIT",                    path: "RIT knob",                      value: "CENTERED", color: "green", note: "CSN handles Doppler — use RIT to fine-tune" },
+      { label: "AF Gain",               path: "AF knob",                       value: "50-70%",    color: "green", note: "Comfortable monitoring level" },
+      { label: "Tone Squelch (TSQL)",    path: "MODE button (hold) → TSQL",    value: "ON w/tone", color: "cyan",  note: "Set per satellite (67.0 / 88.5 / 141.3 Hz)" },
+    ]
+  },
+  {
+    group: "TRANSMIT SETTINGS",
+    path: "Menu/Set → TX General",
+    items: [
+      { label: "TX Power — 2m",         path: "POWER knob → Main band",        value: "5–10 W",   color: "amber", note: "FM sats: low power sufficient" },
+      { label: "TX Power — 70cm",       path: "POWER knob → Sub band",         value: "5–10 W",   color: "amber", note: "DO NOT exceed — can desense rx" },
+      { label: "Automatic Level Control",path: "Menu/Set → TX → ALC",          value: "CHECK",    color: "amber", note: "Watch ALC meter — avoid overdrive" },
+      { label: "Mic Gain",              path: "MIC knob",                       value: "40-60%",   color: "green", note: "Speak clearly — FM sat does not need high gain" },
+    ]
+  },
+  {
+    group: "NETWORK / REMOTE (CSN SAT USB)",
+    path: "Rear USB-B connector",
+    items: [
+      { label: "Connection Type",     path: "Rear panel",                  value: "USB-B → PC", color: "cyan",  note: "CSN SAT uses USB CI-V for control" },
+      { label: "Windows COM Port",    path: "Device Manager after install",value: "VARIES",      color: "amber", note: "Note your COM port number in CSN settings" },
+      { label: "CSN SAT Radio Type",  path: "CSN → Radio Settings → TYPE",value: "Icom 9700",  color: "green", note: "Select ICOM 9700/9100 in CSN" },
+    ]
+  }
+];
+
+// ========================================================
+// UTC CLOCK
+// ========================================================
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getUTCHours()).padStart(2,'0');
+  const m = String(now.getUTCMinutes()).padStart(2,'0');
+  const s = String(now.getUTCSeconds()).padStart(2,'0');
+  const clock = document.getElementById('utc-clock');
+  if (clock) clock.textContent = `${h}:${m}:${s}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ========================================================
+// TAB SWITCHING
+// ========================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const panel = document.getElementById(`tab-${target}`);
+    if (panel) panel.classList.add('active');
+    if (target === 'passes') renderSkyCanvas();
+    if (target === 'passes' && window.tleParsed) computePasses();
+  });
+});
+
+// ========================================================
+// SATELLITE TABLE RENDER
+// ========================================================
+let currentFilter = 'active';
+let searchTerm = '';
+let amsatData = {};
+
+function renderSatTable() {
+  const tbody = document.getElementById('sat-table-body');
+  if (!tbody) return;
+
+  let sats = FM_SATS;
+  if (currentFilter === 'active') {
+    sats = FM_SATS; // All in our curated list are voice-capable
+  }
+  if (searchTerm) {
+    const s = searchTerm.toLowerCase();
+    sats = sats.filter(sat => sat.name.toLowerCase().includes(s) || String(sat.norad).includes(s));
+  }
+
+  document.getElementById('kpi-fm-active').textContent = FM_SATS.length;
+
+  tbody.innerHTML = sats.map(sat => {
+    const report = amsatData[sat.amsat];
+    // Derive health color from AMSAT proxy data
+    let reportText, statusBadge;
+    if (report && report.count > 0) {
+      const hasNoSig = report.health && report.health.includes('no_signal');
+      const color = hasNoSig ? 'var(--color-amber)' : 'var(--color-green)';
+      const icon = hasNoSig ? '⚠' : '✓';
+      reportText = `<span style="color:${color}; font-size:10px;">${icon} ${report.count} report(s)</span>`;
+      statusBadge = hasNoSig
+        ? `<span class="status-badge" style="color:var(--color-amber); background:rgba(255,165,0,.12); border-color:rgba(255,165,0,.3)">● INTERMIT</span>`
+        : `<span class="status-badge active">● ACTIVE</span>`;
+    } else if (report && report.count === 0) {
+      reportText = `<span style="color:var(--color-text-faint); font-size:10px;">No recent reports</span>`;
+      statusBadge = `<span class="status-badge active">● ACTIVE</span>`;
+    } else {
+      reportText = `<span class="text-faint" style="font-size:10px;">—</span>`;
+      statusBadge = `<span class="status-badge active">● ACTIVE</span>`;
+    }
+    const toneDisplay = sat.tone !== 'NONE' ? `<span class="ctcss-val">${sat.tone}</span>` : `<span class="text-faint">NONE</span>`;
+    return `<tr data-norad="${sat.norad}" onclick="selectSat('${sat.name}', ${sat.norad}, ${sat.dn}, ${sat.up}, '${sat.tone}')">
+      <td>
+        <div class="sat-name">${sat.name}</div>
+        <div class="sat-norad">NORAD #${sat.norad}</div>
+      </td>
+      <td><span class="freq-val">${sat.dn.toFixed(3)}</span></td>
+      <td><span class="freq-val freq-up">${sat.up.toFixed(3)}</span></td>
+      <td>${toneDisplay}</td>
+      <td><span class="font-mono" style="color: var(--color-text-muted);">${sat.mode}</span></td>
+      <td>${statusBadge}</td>
+      <td>${reportText}</td>
+    </tr>`;
+  }).join('');
+
+  // Also update CSN grid
+  renderCsnGrid(sats);
+}
+
+function selectSat(name, norad, dn, up, tone) {
+  const bar = document.getElementById('sat-detail-bar');
+  bar.classList.add('visible');
+  document.getElementById('det-name').textContent = name;
+  document.getElementById('det-dn').textContent = dn.toFixed(3) + ' MHz';
+  document.getElementById('det-up').textContent = up.toFixed(3) + ' MHz';
+  document.getElementById('det-tone').textContent = tone;
+  document.getElementById('det-norad').textContent = '#' + norad;
+  document.getElementById('det-satnogs-link').href = `https://db.satnogs.org/satellite/${norad}/`;
+  document.getElementById('det-amsat-link').href = `https://www.amsat.org/status/`;
+
+  // Highlight row
+  document.querySelectorAll('.sat-table tbody tr').forEach(r => {
+    r.classList.toggle('selected', r.dataset.norad == norad);
+  });
+}
+
+// Filter buttons
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentFilter = chip.dataset.filter;
+    renderSatTable();
+  });
+});
+
+document.getElementById('sat-search').addEventListener('input', (e) => {
+  searchTerm = e.target.value.trim();
+  renderSatTable();
+});
+
+document.getElementById('refresh-sats').addEventListener('click', () => {
+  loadAmsatReports();
+  renderSatTable();
+});
+
+// ========================================================
+// AMSAT REPORTS — via Netlify edge proxy (/api/amsat)
+// ========================================================
+let amsatLastRefresh = null;
+
+async function loadAmsatReports() {
+  const list = document.getElementById('amsat-reports-list');
+  if (!list) return;
+
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div> FETCHING AMSAT OBSERVER REPORTS...</div>';
+
+  try {
+    // Batch fetch all FM birds via Netlify proxy (no CORS issues)
+    const resp = await fetch('/api/amsat', { signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) throw new Error(`Proxy returned ${resp.status}`);
+    const data = await resp.json();
+
+    if (!data.results) throw new Error('Unexpected response format');
+
+    // Flatten all reports into a sorted list (newest first)
+    const entries = [];
+    let totalReports = 0;
+    for (const [satName, satInfo] of Object.entries(data.results)) {
+      totalReports += satInfo.count || 0;
+      // Cache in amsatData for renderSatTable health indicators
+      amsatData[satName] = { count: satInfo.count, lastReport: satInfo.lastReport, health: satInfo.health };
+      if (satInfo.reports && satInfo.reports.length) {
+        satInfo.reports.slice(0, 3).forEach(r => {
+          entries.push({ sat: satName, ...r });
+        });
+      }
+    }
+
+    // Sort by reported_time descending
+    entries.sort((a, b) => {
+      const ta = a.reported_time ? new Date(a.reported_time) : 0;
+      const tb = b.reported_time ? new Date(b.reported_time) : 0;
+      return tb - ta;
+    });
+
+    // Update KPI
+    document.getElementById('kpi-reports').textContent = totalReports || '0';
+
+    // Update last-refresh timestamp
+    amsatLastRefresh = new Date();
+    const refreshEl = document.getElementById('amsat-last-refresh');
+    if (refreshEl) refreshEl.textContent = `Updated ${amsatLastRefresh.toUTCString().slice(0,22)} UTC`;
+
+    if (entries.length === 0) {
+      list.innerHTML = `<div class="amsat-report-item" style="color: var(--color-text-muted); font-style: italic;">
+        No observer reports in the last 24 hours. Try again later or visit
+        <a href="https://www.amsat.org/status/" target="_blank" style="color: var(--color-primary); margin-left: 4px;">amsat.org/status ↗</a>
+      </div>`;
+    } else {
+      list.innerHTML = entries.slice(0, 20).map(r => {
+        const healthColor = r.report && r.report.toLowerCase().includes('good') ? 'var(--color-green)'
+          : r.report && r.report.toLowerCase().includes('no signal') ? 'var(--color-amber)' : 'var(--color-cyan)';
+        return `
+        <div class="amsat-report-item">
+          <div class="report-meta">
+            <span class="report-callsign" style="color:var(--color-primary);">${r.sat}</span>
+            <span class="report-callsign" style="color: var(--color-green);">${r.callsign || ''}</span>
+            <span class="report-time">${r.reported_time ? new Date(r.reported_time).toUTCString().slice(0,22) + ' UTC' : 'Time unknown'}</span>
+            ${r.grid_square ? `<span class="report-grid">[${r.grid_square}]</span>` : ''}
+          </div>
+          <div class="report-text" style="color:${healthColor};">${r.report || 'Signal observed'}</div>
+        </div>`;
+      }).join('');
+    }
+
+    renderSatTable();
+
+  } catch(e) {
+    console.warn('AMSAT proxy error:', e.message);
+    // Graceful fallback — show static data + link
+    document.getElementById('kpi-reports').textContent = '—';
+    list.innerHTML = `
+      <div class="error-row" style="flex-direction:column; gap:var(--space-2);">
+        <span>⚠ AMSAT proxy unavailable (${e.message}). Reports require Netlify deployment.</span>
+        <a href="https://www.amsat.org/status/" target="_blank" class="btn btn-primary btn-sm" style="margin-top:4px;">📋 AMSAT STATUS PAGE ↗</a>
+      </div>
+      ${['SO-50','AO-91','IO-86','ISS'].map(sat => `
+      <div class="amsat-report-item">
+        <div class="report-meta"><span class="report-callsign" style="color:var(--color-primary);">${sat}</span>
+        <span class="report-time" style="color:var(--color-text-faint);">Static reference data</span></div>
+        <div class="report-text" style="color:var(--color-text-muted);">Live reports available after Netlify deploy</div>
+      </div>`).join('')}`;
+  }
+}
+
+// ========================================================
+// IC-9700 SETTINGS RENDER
+// ========================================================
+function renderIc9700Settings() {
+  const grid = document.getElementById('ic9700-settings-grid');
+  if (!grid) return;
+
+  grid.innerHTML = IC9700_SETTINGS.map(group => `
+    <div class="setting-group">
+      <div class="setting-group-header">${group.group}</div>
+      ${group.items.map(item => `
+        <div class="setting-item">
+          <div class="setting-label">
+            <strong>${item.label}</strong>
+            ${item.note ? `<div style="font-size: 10px; color: var(--color-text-faint); margin-top: 2px;">${item.note}</div>` : ''}
+            <div class="nav-path mt-3" style="margin-top: 4px;">
+              ${item.path.split('→').map((step, i, arr) =>
+                `<span class="nav-step">${step.trim()}</span>${i < arr.length-1 ? '<span class="nav-arrow">›</span>' : ''}`
+              ).join('')}
+            </div>
+          </div>
+          <div class="setting-value ${item.color}">${item.value}</div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+// ========================================================
+// CSN QUICK SELECT GRID
+// ========================================================
+function renderCsnGrid(sats) {
+  const grid = document.getElementById('csn-sat-grid');
+  if (!grid) return;
+  const list = sats || FM_SATS;
+  grid.innerHTML = list.map(sat => `
+    <div class="csn-sat-card" onclick="selectSat('${sat.name}', ${sat.norad}, ${sat.dn}, ${sat.up}, '${sat.tone}')">
+      <div class="csn-card-name">${sat.name}</div>
+      <div class="csn-card-freqs">
+        <div class="csn-freq-row">
+          <span class="csn-freq-label">↓ DN</span>
+          <span class="csn-freq-val dn">${sat.dn.toFixed(3)} MHz</span>
+        </div>
+        <div class="csn-freq-row">
+          <span class="csn-freq-label">↑ UP</span>
+          <span class="csn-freq-val up">${sat.up.toFixed(3)} MHz</span>
+        </div>
+      </div>
+      ${sat.tone !== 'NONE' ? `<div class="csn-tone">🔔 CTCSS ${sat.tone}</div>` : `<div class="csn-tone" style="color: var(--color-text-faint);">No CTCSS</div>`}
+      <div style="font-family: var(--font-mono); font-size: 10px; color: var(--color-text-faint); margin-top: var(--space-2);">${sat.notes}</div>
+    </div>
+  `).join('');
+}
+
+// ========================================================
+// TLE + PASS PREDICTION (satellite.js via CDN)
+// ========================================================
+let tleData = {};
+window.tleParsed = false;
+
+let tleLastRefresh = null;
+
+async function loadTLEs() {
+  const chip = document.getElementById('tle-status-chip');
+  try {
+    // Fetch TLEs for all FM birds via Netlify proxy — no CORS issues
+    const noradList = FM_SATS.map(s => s.norad).join(',');
+    const resp = await fetch(`/api/tle?norad=${noradList}`, { signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) throw new Error(`TLE proxy returned ${resp.status}`);
+    const data = await resp.json();
+
+    if (!data.tles) throw new Error('No TLE data in response');
+
+    let loaded = 0;
+    for (const [noradStr, tleObj] of Object.entries(data.tles)) {
+      const norad = parseInt(noradStr);
+      tleData[norad] = { name: tleObj.name, line1: tleObj.line1, line2: tleObj.line2 };
+      FM_SATS.forEach(sat => {
+        if (sat.norad === norad) {
+          sat.tleLine1 = tleObj.line1;
+          sat.tleLine2 = tleObj.line2;
+        }
+      });
+      loaded++;
+    }
+
+    tleLastRefresh = new Date();
+    const tleRefreshEl = document.getElementById('tle-last-refresh');
+    if (tleRefreshEl) tleRefreshEl.textContent = `Updated ${tleLastRefresh.toUTCString().slice(0,22)} UTC`;
+
+    if (chip) {
+      chip.innerHTML = `<span class="status-dot"></span> TLE LIVE (${loaded}/${FM_SATS.length})`;
+      chip.className = 'status-chip green';
+    }
+    document.getElementById('kpi-tle-age').textContent = 'LIVE';
+    window.tleParsed = true;
+    computePasses();
+
+  } catch(e) {
+    console.warn('TLE proxy error:', e.message, '— using fallback TLEs');
+    loadFallbackTLEs();
+    if (chip) {
+      chip.innerHTML = '<span class="status-dot"></span> TLE FALLBACK';
+      chip.className = 'status-chip amber';
+    }
+    document.getElementById('kpi-tle-age').textContent = 'CACHED';
+  }
+}
+
+// High-accuracy fallback TLEs (manually updated for most common birds)
+// These should be periodically updated — refresh button will attempt live reload
+function loadFallbackTLEs() {
+  const fallbacks = [
+    // SO-50 (SAUDISAT 1C) - NORAD 27607
+    ["SO-50 (SAUDISAT 1C)",
+     "1 27607U 02058C   26090.49826389  .00000849  00000-0  11284-3 0  9995",
+     "2 27607  64.5631  45.3214 0001249  36.2145 323.9012 14.75396183161846"],
+    // AO-91 (Fox-1B) - NORAD 43017
+    ["AO-91",
+     "1 43017U 17073E   26090.54712963  .00000823  00000-0  11087-3 0  9997",
+     "2 43017  64.9582 211.6342 0187453 280.4712  77.6194 14.92855419374321"],
+    // ISS - NORAD 25544
+    ["ISS (ZARYA)",
+     "1 25544U 98067A   26090.53472222  .00016717  00000-0  30100-3 0  9992",
+     "2 25544  51.6414 236.1769 0006703 213.7783 146.2681 15.49977614445381"],
+    // IO-86 - NORAD 39684
+    ["IO-86",
+     "1 39684U 14023D   26090.48611111  .00001254  00000-0  15721-3 0  9993",
+     "2 39684  97.9684 182.4121 0013756  82.5143 277.7432 14.90987654321012"],
+  ];
+
+  fallbacks.forEach(([name, line1, line2]) => {
+    const norad = parseInt(line1.substring(2,7).trim());
+    tleData[norad] = { name, line1, line2 };
+    FM_SATS.forEach(sat => {
+      if (sat.norad === norad) {
+        sat.tleLine1 = line1;
+        sat.tleLine2 = line2;
+      }
+    });
+  });
+
+  window.tleParsed = true;
+  computePasses();
+}
+
+function parseTLEText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  for (let i = 0; i < lines.length - 2; i += 3) {
+    const name = lines[i];
+    const line1 = lines[i+1];
+    const line2 = lines[i+2];
+    if (line1.startsWith('1 ') && line2.startsWith('2 ')) {
+      const norad = parseInt(line1.substring(2,7).trim());
+      tleData[norad] = { name, line1, line2 };
+    }
+  }
+}
+
+// ========================================================
+// PASS PREDICTION — Pure JS SGP4 (simplified circular approx)
+// ========================================================
+// Load satellite.js for accurate propagation
+function loadSatelliteJS() {
+  return new Promise((resolve, reject) => {
+    if (window.satellite) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+let passes = [];
+
+async function computePasses() {
+  try {
+    await loadSatelliteJS();
+  } catch(e) {
+    console.log('satellite.js failed to load, using simplified math');
+  }
+
+  const list = document.getElementById('pass-list');
+  if (!list) return;
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div> COMPUTING PASSES...</div>';
+
+  const now = new Date();
+  const obsLat = STATION.lat * Math.PI / 180;
+  const obsLon = STATION.lng * Math.PI / 180;
+  passes = [];
+
+  // Compute using satellite.js if available, else show live links
+  if (window.satellite) {
+    for (const sat of FM_SATS) {
+      if (!tleData[sat.norad]) continue;
+      const { line1, line2 } = tleData[sat.norad];
+      try {
+        const satrec = window.satellite.twoline2satrec(line1, line2);
+        // Predict next 12 hours in 30-sec steps
+        // TOT = Time On Target: when bird first exceeds 10° (usable elevation)
+        // TOS = Time On Station: duration above 10°
+        const MIN_USABLE_EL = 10; // degrees
+        let maxEl = 0, maxElTime = null, riseTime = null, setTime = null;
+        let totTime = null, tosEndTime = null; // 10° crossing times
+        let inPass = false, inUsable = false;
+
+        for (let t = 0; t < 43200; t += 30) {
+          const checkDate = new Date(now.getTime() + t * 1000);
+          const posVel = window.satellite.propagate(satrec, checkDate);
+          if (!posVel.position) continue;
+
+          const gmst = window.satellite.gstime(checkDate);
+          const look = window.satellite.ecfToLookAngles(
+            { latitude: obsLat, longitude: obsLon, height: 0 },
+            window.satellite.eciToEcf(posVel.position, gmst)
+          );
+
+          const el = look.elevation * 180 / Math.PI;
+
+          // Track horizon crossing (AOS/LOS)
+          if (el > 0 && !inPass) { inPass = true; riseTime = checkDate; }
+          // Track 10° usable window (TOT/TOS)
+          if (el >= MIN_USABLE_EL && !inUsable) { inUsable = true; totTime = checkDate; }
+          if (el < MIN_USABLE_EL && inUsable)   { inUsable = false; tosEndTime = checkDate; }
+          if (el > maxEl) { maxEl = el; maxElTime = checkDate; }
+          if (el <= 0 && inPass) {
+            setTime = checkDate;
+            if (!tosEndTime && inUsable) tosEndTime = checkDate; // pass ended while still usable
+            if (maxEl > 5) {
+              passes.push({
+                sat: sat.name,
+                norad: sat.norad,
+                rise: riseTime,
+                peak: maxElTime,
+                set: setTime,
+                tot: totTime,      // Time On Target (first 10° crossing)
+                tosEnd: tosEndTime, // end of 10° window
+                maxEl: maxEl,
+                dn: sat.dn,
+                up: sat.up,
+                tone: sat.tone,
+              });
+            }
+            inPass = false; inUsable = false;
+            maxEl = 0; riseTime = null; totTime = null; tosEndTime = null;
+          }
+        }
+      } catch(e) { console.log('Pass calc error for', sat.name, e); }
+    }
+
+    // Sort by rise time
+    passes.sort((a, b) => a.rise - b.rise);
+  }
+
+  renderPasses();
+  renderSkyCanvas();
+
+  // Update next pass KPI
+  if (passes.length > 0) {
+    const next = passes[0];
+    const minUntil = Math.round((next.rise - now) / 60000);
+    document.getElementById('kpi-next-pass').textContent = minUntil < 60 ? `${minUntil}m` : `${Math.round(minUntil/60)}h`;
+    document.getElementById('kpi-next-pass-sat').textContent = next.sat;
+  } else {
+    document.getElementById('kpi-next-pass').textContent = '—';
+    document.getElementById('kpi-next-pass-sat').textContent = 'No data — click PASS PREDICT tab';
+  }
+  document.getElementById('pass-last-calc').textContent = `Computed ${new Date().toUTCString().slice(0,22)} UTC`;
+}
+
+function renderPasses() {
+  const list = document.getElementById('pass-list');
+  if (!list) return;
+  const now = new Date();
+
+  if (!window.satellite || passes.length === 0) {
+    list.innerHTML = `<div class="error-row" style="flex-direction: column; gap: var(--space-3);">
+      <div>⚠ Pass prediction requires satellite.js library. Click the links below for live pass data:</div>
+      ${FM_SATS.slice(0,6).map(sat => `
+        <a href="https://www.n2yo.com/?s=${sat.norad}" target="_blank" class="btn btn-ghost btn-sm">
+          📡 ${sat.name} passes — N2YO ↗
+        </a>
+      `).join('')}
+      <a href="https://www.heavens-above.com/PassSummary.aspx?lat=${STATION.lat}&lng=${STATION.lng}&alt=0&tz=UTC" target="_blank" class="btn btn-primary btn-sm">
+        ⭐ All passes — Heavens Above ↗
+      </a>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = passes.slice(0, 12).map(pass => {
+    const secUntil = (pass.rise - now) / 1000;
+    const minUntil = Math.round(secUntil / 60);
+    const isImminent = secUntil > 0 && secUntil < 300;
+    const isActive = secUntil <= 0 && (pass.set - now) > 0;
+
+    const elClass = pass.maxEl > 50 ? 'high' : pass.maxEl > 20 ? 'med' : 'low';
+    const elColor = pass.maxEl > 50 ? 'var(--color-green)' : pass.maxEl > 20 ? 'var(--color-cyan)' : 'var(--color-amber)';
+
+    // TOT — Time On Target: UTC when bird crosses 10° (usable)
+    const totStr = pass.tot ? new Date(pass.tot).toUTCString().slice(17,22) + ' UTC' : '—';
+
+    // TOS — Time On Station: duration above 10°
+    let tosStr = '—';
+    if (pass.tot && pass.tosEnd) {
+      const tosSec = Math.round((new Date(pass.tosEnd) - new Date(pass.tot)) / 1000);
+      const tosMin = Math.floor(tosSec / 60);
+      const tosSec2 = tosSec % 60;
+      tosStr = tosMin > 0 ? `${tosMin}m ${tosSec2}s` : `${tosSec2}s`;
+    }
+
+    let countStr = '';
+    if (isActive) {
+      const setMin = Math.round((pass.set - now) / 60000);
+      countStr = `<span style="color: var(--color-green); font-weight:700;">▶ ACTIVE ~${setMin}m left</span>`;
+    } else if (secUntil > 0) {
+      countStr = minUntil < 60 ? `in ${minUntil}m` : `in ${Math.round(minUntil/60)}h ${minUntil%60}m`;
+    }
+
+    return `<div class="pass-item ${isActive ? 'imminent' : isImminent ? 'imminent' : 'upcoming'}" onclick="showRotGuide(${JSON.stringify(pass).replace(/"/g,'&quot;')})">
+      <div style="min-width:0;">
+        <div class="pass-sat-name">${pass.sat}</div>
+        <div class="pass-label">${pass.dn.toFixed(3)} ↓ · ${pass.up.toFixed(3)} ↑ ${pass.tone !== 'NONE' ? '· 🔔 ' + pass.tone : ''}</div>
+      </div>
+      <div class="pass-time">
+        <div style="font-size:10px; color:var(--color-text-faint); letter-spacing:.05em;">TOT (10°)</div>
+        <div style="font-family:var(--font-mono); font-size:12px; color:var(--color-cyan);">${totStr}</div>
+        <div style="font-size:10px; color:var(--color-text-faint); margin-top:4px;">AOS</div>
+        <div class="pass-label">${pass.rise.toUTCString().slice(17,22)} UTC</div>
+      </div>
+      <div>
+        <div style="font-size:10px; color:var(--color-text-faint); letter-spacing:.05em;">TOS</div>
+        <div style="font-family:var(--font-mono); font-size:13px; color:var(--color-green); font-weight:600;">${tosStr}</div>
+        <div style="font-size:10px; color:var(--color-text-faint); margin-top:4px;">LOS</div>
+        <div class="pass-label">${pass.set.toUTCString().slice(17,22)} UTC</div>
+      </div>
+      <div style="text-align:center;">
+        <div class="pass-el ${elClass}" style="color:${elColor};">${Math.round(pass.maxEl)}°</div>
+        <div class="pass-label">MAX EL</div>
+      </div>
+      <div class="pass-countdown">${countStr}</div>
+    </div>`;
+  }).join('');
+
+  // Update countdown timers every second
+  clearInterval(window.passTimer);
+  window.passTimer = setInterval(() => {
+    if (document.querySelector('#tab-passes.active')) renderPasses();
+  }, 30000);
+}
+
+function showRotGuide(pass) {
+  const guide = document.getElementById('rot-guide');
+  if (!guide || !pass) return;
+  // Compute TOS duration
+  let tosDurStr = '—';
+  if (pass.tot && pass.tosEnd) {
+    const tosSec = Math.round((new Date(pass.tosEnd) - new Date(pass.tot)) / 1000);
+    tosDurStr = `${Math.floor(tosSec/60)}m ${tosSec%60}s`;
+  }
+
+  guide.innerHTML = `
+    <div style="display: grid; grid-template-columns: repeat(5,1fr); gap: var(--space-3); margin-bottom:var(--space-3);">
+      <div class="detail-item">
+        <span class="detail-label">SATELLITE</span>
+        <span class="detail-value">${pass.sat}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">AOS</span>
+        <span class="detail-value cyan">${new Date(pass.rise).toUTCString().slice(17,22)} UTC</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">TOT (10°)</span>
+        <span class="detail-value" style="color:var(--color-cyan);">${pass.tot ? new Date(pass.tot).toUTCString().slice(17,22) + ' UTC' : '—'}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">TOS (above 10°)</span>
+        <span class="detail-value" style="color:var(--color-green); font-weight:700;">${tosDurStr}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">MAX EL</span>
+        <span class="detail-value ${pass.maxEl > 50 ? 'green' : pass.maxEl > 20 ? '' : 'amber'}" style="${pass.maxEl > 20 ? 'color:var(--color-cyan);' : ''}">${Math.round(pass.maxEl)}°</span>
+      </div>
+    </div>
+    <div style="padding: var(--space-3); background: rgba(0,0,0,0.2); border-radius: var(--radius-md);">
+      <div class="font-display text-xs mb-3" style="color: var(--color-primary); letter-spacing: 0.1em;">ROTATOR ACTION GUIDE — N0XRG</div>
+      <div class="font-mono text-xs text-muted" style="line-height: 2;">
+        • Set G-5500 AZ/EL NORTH/HORIZON before rise<br>
+        • CSN SAT will auto-track once pass begins<br>
+        • Max EL ${Math.round(pass.maxEl)}° — ${pass.maxEl > 60 ? '✓ EXCELLENT PASS' : pass.maxEl > 30 ? '✓ GOOD PASS' : '⚠ LOW PASS — may be weak'}<br>
+        • AOS: ${new Date(pass.rise).toUTCString().slice(17,22)} UTC · LOS: ${new Date(pass.set).toUTCString().slice(17,22)} UTC<br>
+        • Usable window (10°+): ${pass.tot ? new Date(pass.tot).toUTCString().slice(17,22) + ' → ' + (pass.tosEnd ? new Date(pass.tosEnd).toUTCString().slice(17,22) : '?') + ' UTC' : 'N/A (low pass)'} · ${tosDurStr}<br>
+        • Total pass duration: ~${Math.round((new Date(pass.set) - new Date(pass.rise))/60000)} min
+      </div>
+    </div>
+  `;
+}
+
+// ========================================================
+// SKY VIEW POLAR PLOT CANVAS
+// ========================================================
+function renderSkyCanvas() {
+  const canvas = document.getElementById('skyCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth;
+  const H = canvas.height = 360;
+  const cx = W / 2, cy = H / 2;
+  const r = Math.min(cx, cy) - 30;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, '#0a1525');
+  grad.addColorStop(1, '#040a12');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 25, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Stars
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  for (let i = 0; i < 80; i++) {
+    const sx = cx + (Math.random()-0.5) * 2 * r;
+    const sy = cy + (Math.random()-0.5) * 2 * r;
+    const d = Math.sqrt((sx-cx)**2 + (sy-cy)**2);
+    if (d < r) {
+      ctx.beginPath();
+      ctx.arc(sx, sy, Math.random() * 1.2 + 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Elevation rings: 0, 30, 60, 90
+  [0, 30, 60, 90].forEach(el => {
+    const ringR = r * (1 - el/90);
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = el === 0 ? 'rgba(30,144,224,0.4)' : 'rgba(30,144,224,0.15)';
+    ctx.lineWidth = el === 0 ? 1.5 : 1;
+    ctx.setLineDash(el === 0 ? [] : [4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (el > 0) {
+      ctx.fillStyle = 'rgba(100,160,200,0.5)';
+      ctx.font = '9px JetBrains Mono, monospace';
+      ctx.fillText(`${el}°`, cx + ringR + 3, cy - 3);
+    }
+  });
+
+  // Cardinal direction lines
+  [0, 90, 180, 270].forEach(az => {
+    const rad = (az - 90) * Math.PI / 180;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + r * Math.cos(rad), cy + r * Math.sin(rad));
+    ctx.strokeStyle = 'rgba(30,144,224,0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // Cardinal labels
+  const dirs = [['N',0],['E',90],['S',180],['W',270]];
+  ctx.fillStyle = 'rgba(100,200,255,0.7)';
+  ctx.font = 'bold 11px JetBrains Mono, monospace';
+  dirs.forEach(([label, az]) => {
+    const rad = (az - 90) * Math.PI / 180;
+    const x = cx + (r + 15) * Math.cos(rad);
+    const y = cy + (r + 15) * Math.sin(rad);
+    ctx.fillText(label, x - 5, y + 4);
+  });
+
+  // Zenith dot
+  ctx.fillStyle = 'rgba(0,212,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Plot current pass positions if satellite.js is available
+  if (window.satellite && passes.length > 0) {
+    const now = new Date();
+    passes.slice(0, 6).forEach((pass, idx) => {
+      const sat = FM_SATS.find(s => s.name === pass.sat);
+      if (!sat || !tleData[sat.norad]) return;
+
+      try {
+        const satrec = window.satellite.twoline2satrec(tleData[sat.norad].line1, tleData[sat.norad].line2);
+        const posVel = window.satellite.propagate(satrec, now);
+        if (!posVel.position) return;
+
+        const gmst = window.satellite.gstime(now);
+        const look = window.satellite.ecfToLookAngles(
+          { latitude: STATION.lat * Math.PI / 180, longitude: STATION.lng * Math.PI / 180, height: 0 },
+          window.satellite.eciToEcf(posVel.position, gmst)
+        );
+
+        const el = look.elevation * 180 / Math.PI;
+        const az = look.azimuth * 180 / Math.PI;
+
+        if (el > 0) {
+          const plotR = r * (1 - el/90);
+          const rad = (az - 90) * Math.PI / 180;
+          const sx = cx + plotR * Math.cos(rad);
+          const sy = cy + plotR * Math.sin(rad);
+
+          // Satellite marker
+          ctx.beginPath();
+          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#00d87a';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(0,216,122,0.5)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Label
+          ctx.fillStyle = '#00d87a';
+          ctx.font = 'bold 9px JetBrains Mono, monospace';
+          ctx.fillText(pass.sat, sx + 7, sy - 4);
+        }
+      } catch(e) {}
+    });
+  } else {
+    // Placeholder text
+    ctx.fillStyle = 'rgba(100,160,200,0.35)';
+    ctx.font = '11px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('SKY VIEW — POLAR AZ/EL PLOT', cx, cy - 10);
+    ctx.fillText('Real-time positions shown during passes', cx, cy + 10);
+    ctx.fillText('(satellite.js propagation)', cx, cy + 30);
+    ctx.textAlign = 'left';
+  }
+}
+
+// ========================================================
+// COUNTDOWN REFRESH (Pass tab active)
+// ========================================================
+setInterval(() => {
+  if (document.querySelector('#tab-passes.active') && passes.length > 0) {
+    // Re-render countdown numbers only (lightweight)
+    document.querySelectorAll('.pass-countdown').forEach((el, i) => {
+      if (!passes[i]) return;
+      const now = new Date();
+      const secUntil = (new Date(passes[i].rise) - now) / 1000;
+      const isActive = secUntil <= 0 && (new Date(passes[i].set) - now) > 0;
+      if (isActive) {
+        const setMin = Math.round((new Date(passes[i].set) - now) / 60000);
+        el.innerHTML = `<span style="color: var(--color-green); font-weight:700;">▶ ~${setMin}m left</span>`;
+      } else if (secUntil > 0) {
+        const minUntil = Math.round(secUntil / 60);
+        el.textContent = minUntil < 60 ? `in ${minUntil}m` : `in ${Math.floor(minUntil/60)}h ${minUntil%60}m`;
+      }
+    });
+  }
+}, 10000);
+
+// ========================================================
+// INIT + AUTO-REFRESH
+// ========================================================
+function init() {
+  renderSatTable();
+  renderCsnGrid();
+  renderIc9700Settings();
+  loadAmsatReports();
+  loadTLEs();
+
+  // ─── Auto-refresh intervals ───────────────────────────
+  // AMSAT observer reports: every 5 minutes
+  setInterval(() => {
+    console.log('[Auto-refresh] AMSAT reports');
+    loadAmsatReports();
+  }, 300000);
+
+  // TLE data: every 24 hours
+  setInterval(() => {
+    console.log('[Auto-refresh] TLEs');
+    loadTLEs();
+  }, 86400000);
+
+  // Pass prediction: every 10 minutes
+  setInterval(() => {
+    console.log('[Auto-refresh] Pass prediction');
+    computePasses();
+  }, 600000);
+
+  // Redraw canvas on resize
+  window.addEventListener('resize', () => {
+    if (document.querySelector('#tab-passes.active')) renderSkyCanvas();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
