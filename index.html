@@ -588,8 +588,10 @@
       transition: all var(--transition);
       cursor: default;
     }
+    .pass-item { cursor: pointer; }
     .pass-item:hover { border-color: var(--color-primary-dim); background: rgba(30,144,224,0.05); }
     .pass-item.upcoming { border-color: var(--color-green-dim); }
+    .pass-item.selected-pass { border-color: var(--color-green) !important; background: rgba(0,216,122,0.07) !important; box-shadow: 0 0 0 1px rgba(0,216,122,0.25); }
     .pass-item.imminent {
       border-color: var(--color-amber);
       background: var(--color-amber-bg);
@@ -1376,9 +1378,9 @@
             <div class="panel-header">
               <div class="panel-title">
                 <span class="panel-title-icon">🌌</span>
-                SKY VIEW — CURRENT SATELLITE POSITIONS
+                SKY VIEW — PASS TRACK POLAR PLOT
               </div>
-              <div class="panel-badge">AZIMUTH/ELEVATION POLAR PLOT</div>
+              <div class="panel-badge">CLICK ANY PASS TO HIGHLIGHT TRACK</div>
             </div>
             <div class="panel-body" style="padding: var(--space-3);">
               <canvas id="skyCanvas" height="360" aria-label="Sky view polar plot"></canvas>
@@ -2421,6 +2423,25 @@ async function computePasses() {
             setTime = checkDate;
             if (!tosEndTime && inUsable) tosEndTime = checkDate; // pass ended while still usable
             if (maxEl > 5) {
+              // --- Build az/el track points for polar plot ---
+              const track = [];
+              const trackStep = 30; // seconds
+              const trackStart = riseTime ? new Date(riseTime.getTime() - 30000) : riseTime;
+              const trackEnd   = new Date(setTime.getTime() + 30000);
+              for (let ts = trackStart; ts <= trackEnd; ts = new Date(ts.getTime() + trackStep * 1000)) {
+                const pv2 = window.satellite.propagate(satrec, ts);
+                if (!pv2.position) continue;
+                const gm2 = window.satellite.gstime(ts);
+                const lk2 = window.satellite.ecfToLookAngles(
+                  { latitude: obsLat, longitude: obsLon, height: 0 },
+                  window.satellite.eciToEcf(pv2.position, gm2)
+                );
+                track.push({
+                  t:  ts.getTime(),
+                  el: lk2.elevation * 180 / Math.PI,
+                  az: lk2.azimuth  * 180 / Math.PI,
+                });
+              }
               passes.push({
                 sat: sat.name,
                 norad: sat.norad,
@@ -2433,6 +2454,7 @@ async function computePasses() {
                 dn: sat.dn,
                 up: sat.up,
                 tone: sat.tone,
+                track,             // az/el points for polar sky plot
               });
             }
             inPass = false; inUsable = false;
@@ -2486,7 +2508,7 @@ function renderPasses() {
     return;
   }
 
-  list.innerHTML = passes.slice(0, 12).map(pass => {
+  list.innerHTML = passes.slice(0, 12).map((pass, idx) => {
     const secUntil = (pass.rise - now) / 1000;
     const minUntil = Math.round(secUntil / 60);
     const isImminent = secUntil > 0 && secUntil < 300;
@@ -2515,7 +2537,7 @@ function renderPasses() {
       countStr = minUntil < 60 ? `in ${minUntil}m` : `in ${Math.round(minUntil/60)}h ${minUntil%60}m`;
     }
 
-    return `<div class="pass-item ${isActive ? 'imminent' : isImminent ? 'imminent' : 'upcoming'}" onclick="showRotGuide(${JSON.stringify(pass).replace(/"/g,'&quot;')})">
+    return `<div class="pass-item ${isActive ? 'imminent' : isImminent ? 'imminent' : 'upcoming'} ${idx === 0 ? 'selected-pass' : ''}" id="pass-card-${idx}" onclick="selectPassOnPlot(${idx})">
       <div style="min-width:0;">
         <div class="pass-sat-name">${pass.sat}</div>
         <div class="pass-label">${pass.dn.toFixed(3)} ↓ · ${pass.up.toFixed(3)} ↑ ${pass.tone !== 'NONE' ? '· 🔔 ' + pass.tone : ''}</div>
@@ -2595,140 +2617,440 @@ function showRotGuide(pass) {
 }
 
 // ========================================================
-// SKY VIEW POLAR PLOT CANVAS
 // ========================================================
+// SKY VIEW POLAR PLOT CANVAS
+// Shows full pass arc tracks for all upcoming passes.
+// Selected pass is highlighted in bright color with:
+//   • Direction-of-travel arrow
+//   • AOS / MAX / LOS labels
+//   • 10° usable window segment in green
+//   • Live satellite dot if pass is active
+// All other passes shown as dimmed ghost tracks.
+// ========================================================
+
+let selectedPassIdx = 0; // which pass is currently highlighted on the polar plot
+
+function selectPassOnPlot(idx) {
+  selectedPassIdx = idx;
+  // Update card highlight styles
+  document.querySelectorAll('.pass-item').forEach((card, i) => {
+    card.classList.toggle('selected-pass', i === idx);
+  });
+  // Show rotator guide for this pass
+  if (passes[idx]) showRotGuide(passes[idx]);
+  // Redraw sky canvas with new selection
+  renderSkyCanvas();
+  // Scroll sky canvas into view
+  const canvas = document.getElementById('skyCanvas');
+  if (canvas) canvas.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Convert az/el to canvas x,y
+function azelToXY(az, el, cx, cy, r) {
+  const plotR = r * (1 - Math.max(0, el) / 90);
+  const rad = (az - 90) * Math.PI / 180;
+  return { x: cx + plotR * Math.cos(rad), y: cy + plotR * Math.sin(rad) };
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color, size) {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const hw = size * 0.5;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - size * Math.cos(angle - hw), y2 - size * Math.sin(angle - hw));
+  ctx.lineTo(x2 - size * Math.cos(angle + hw), y2 - size * Math.sin(angle + hw));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 function renderSkyCanvas() {
   const canvas = document.getElementById('skyCanvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const W = canvas.width = canvas.offsetWidth;
-  const H = canvas.height = 360;
+  const W = canvas.width = canvas.offsetWidth || 400;
+  const H = canvas.height = Math.min(W, 420);
   const cx = W / 2, cy = H / 2;
-  const r = Math.min(cx, cy) - 30;
+  const r = Math.min(cx, cy) - 36;
 
   ctx.clearRect(0, 0, W, H);
 
-  // Background
+  // ── Background ──────────────────────────────────────────
   const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  grad.addColorStop(0, '#0a1525');
+  grad.addColorStop(0, '#0b1828');
   grad.addColorStop(1, '#040a12');
+  ctx.fillStyle = '#040a12';
+  ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.arc(cx, cy, r + 25, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Stars
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  for (let i = 0; i < 80; i++) {
-    const sx = cx + (Math.random()-0.5) * 2 * r;
-    const sy = cy + (Math.random()-0.5) * 2 * r;
-    const d = Math.sqrt((sx-cx)**2 + (sy-cy)**2);
-    if (d < r) {
+  // ── Static stars (seeded so they don't flicker) ─────────
+  const starSeed = 42;
+  for (let i = 0; i < 90; i++) {
+    const sx = cx + ((Math.sin(i * 7.3 + starSeed) * 0.5 + 0.5) * 2 - 1) * r;
+    const sy = cy + ((Math.cos(i * 13.7 + starSeed) * 0.5 + 0.5) * 2 - 1) * r;
+    if (Math.sqrt((sx-cx)**2 + (sy-cy)**2) < r) {
+      const sz = 0.3 + (i % 5) * 0.25;
+      ctx.fillStyle = `rgba(255,255,255,${0.15 + (i % 3) * 0.12})`;
       ctx.beginPath();
-      ctx.arc(sx, sy, Math.random() * 1.2 + 0.2, 0, Math.PI * 2);
+      ctx.arc(sx, sy, sz, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  // Elevation rings: 0, 30, 60, 90
-  [0, 30, 60, 90].forEach(el => {
+  // ── 10° horizon shading (below usable elevation) ────────
+  const ring10 = r * (1 - 10/90);
+  const grayZone = ctx.createRadialGradient(cx, cy, ring10, cx, cy, r);
+  grayZone.addColorStop(0, 'rgba(255,165,0,0)');
+  grayZone.addColorStop(1, 'rgba(255,100,0,0.07)');
+  ctx.fillStyle = grayZone;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.arc(cx, cy, ring10, 0, Math.PI * 2, true);
+  ctx.fill();
+
+  // ── Elevation rings: 0°, 10°, 30°, 60°, 90° ────────────
+  const rings = [0, 10, 30, 60, 90];
+  rings.forEach(el => {
     const ringR = r * (1 - el/90);
     ctx.beginPath();
     ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
-    ctx.strokeStyle = el === 0 ? 'rgba(30,144,224,0.4)' : 'rgba(30,144,224,0.15)';
-    ctx.lineWidth = el === 0 ? 1.5 : 1;
-    ctx.setLineDash(el === 0 ? [] : [4, 4]);
+    if (el === 0) {
+      ctx.strokeStyle = 'rgba(30,144,224,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+    } else if (el === 10) {
+      ctx.strokeStyle = 'rgba(255,140,0,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 5]);
+    } else {
+      ctx.strokeStyle = 'rgba(30,144,224,0.18)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
 
-    if (el > 0) {
-      ctx.fillStyle = 'rgba(100,160,200,0.5)';
+    if (el > 0 && el < 90) {
+      ctx.fillStyle = el === 10 ? 'rgba(255,160,60,0.6)' : 'rgba(100,160,200,0.45)';
       ctx.font = '9px JetBrains Mono, monospace';
+      ctx.textAlign = 'left';
       ctx.fillText(`${el}°`, cx + ringR + 3, cy - 3);
     }
   });
 
-  // Cardinal direction lines
-  [0, 90, 180, 270].forEach(az => {
+  // ── Cardinal spokes ──────────────────────────────────────
+  [0, 45, 90, 135, 180, 225, 270, 315].forEach(az => {
     const rad = (az - 90) * Math.PI / 180;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + r * Math.cos(rad), cy + r * Math.sin(rad));
-    ctx.strokeStyle = 'rgba(30,144,224,0.2)';
+    ctx.strokeStyle = az % 90 === 0 ? 'rgba(30,144,224,0.25)' : 'rgba(30,144,224,0.1)';
     ctx.lineWidth = 1;
+    ctx.setLineDash(az % 90 === 0 ? [] : [2, 6]);
     ctx.stroke();
+    ctx.setLineDash([]);
   });
 
-  // Cardinal labels
-  const dirs = [['N',0],['E',90],['S',180],['W',270]];
-  ctx.fillStyle = 'rgba(100,200,255,0.7)';
-  ctx.font = 'bold 11px JetBrains Mono, monospace';
-  dirs.forEach(([label, az]) => {
+  // ── Cardinal labels (N/NE/E/SE/S/SW/W/NW) ───────────────
+  const dirs = [
+    ['N',0,'rgba(100,200,255,0.9)'],
+    ['NE',45,'rgba(100,200,255,0.5)'],
+    ['E',90,'rgba(100,200,255,0.9)'],
+    ['SE',135,'rgba(100,200,255,0.5)'],
+    ['S',180,'rgba(100,200,255,0.9)'],
+    ['SW',225,'rgba(100,200,255,0.5)'],
+    ['W',270,'rgba(100,200,255,0.9)'],
+    ['NW',315,'rgba(100,200,255,0.5)'],
+  ];
+  dirs.forEach(([label, az, color]) => {
     const rad = (az - 90) * Math.PI / 180;
-    const x = cx + (r + 15) * Math.cos(rad);
-    const y = cy + (r + 15) * Math.sin(rad);
-    ctx.fillText(label, x - 5, y + 4);
+    const dist = az % 90 === 0 ? r + 18 : r + 14;
+    const x = cx + dist * Math.cos(rad);
+    const y = cy + dist * Math.sin(rad);
+    ctx.fillStyle = color;
+    ctx.font = az % 90 === 0 ? 'bold 11px JetBrains Mono, monospace' : '9px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x, y);
   });
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 
-  // Zenith dot
-  ctx.fillStyle = 'rgba(0,212,255,0.6)';
+  // ── Zenith cross-hair ────────────────────────────────────
+  ctx.strokeStyle = 'rgba(0,212,255,0.5)';
+  ctx.lineWidth = 1;
+  const zh = 5;
+  ctx.beginPath(); ctx.moveTo(cx - zh, cy); ctx.lineTo(cx + zh, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - zh); ctx.lineTo(cx, cy + zh); ctx.stroke();
+  ctx.fillStyle = 'rgba(0,212,255,0.7)';
   ctx.beginPath();
-  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
   ctx.fill();
 
-  // Plot current pass positions if satellite.js is available
-  if (window.satellite && passes.length > 0) {
-    const now = new Date();
-    passes.slice(0, 6).forEach((pass, idx) => {
-      const sat = FM_SATS.find(s => s.name === pass.sat);
-      if (!sat || !tleData[sat.norad]) return;
-
-      try {
-        const satrec = window.satellite.twoline2satrec(tleData[sat.norad].line1, tleData[sat.norad].line2);
-        const posVel = window.satellite.propagate(satrec, now);
-        if (!posVel.position) return;
-
-        const gmst = window.satellite.gstime(now);
-        const look = window.satellite.ecfToLookAngles(
-          { latitude: STATION.lat * Math.PI / 180, longitude: STATION.lng * Math.PI / 180, height: 0 },
-          window.satellite.eciToEcf(posVel.position, gmst)
-        );
-
-        const el = look.elevation * 180 / Math.PI;
-        const az = look.azimuth * 180 / Math.PI;
-
-        if (el > 0) {
-          const plotR = r * (1 - el/90);
-          const rad = (az - 90) * Math.PI / 180;
-          const sx = cx + plotR * Math.cos(rad);
-          const sy = cy + plotR * Math.sin(rad);
-
-          // Satellite marker
-          ctx.beginPath();
-          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-          ctx.fillStyle = '#00d87a';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(0,216,122,0.5)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // Label
-          ctx.fillStyle = '#00d87a';
-          ctx.font = 'bold 9px JetBrains Mono, monospace';
-          ctx.fillText(pass.sat, sx + 7, sy - 4);
-        }
-      } catch(e) {}
-    });
-  } else {
-    // Placeholder text
-    ctx.fillStyle = 'rgba(100,160,200,0.35)';
+  // ── Placeholder if no passes ─────────────────────────────
+  if (!window.satellite || passes.length === 0) {
+    ctx.fillStyle = 'rgba(100,160,200,0.3)';
     ctx.font = '11px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('SKY VIEW — POLAR AZ/EL PLOT', cx, cy - 10);
-    ctx.fillText('Real-time positions shown during passes', cx, cy + 10);
-    ctx.fillText('(satellite.js propagation)', cx, cy + 30);
+    ctx.fillText('PASS TRACK POLAR PLOT', cx, cy - 14);
+    ctx.fillText('Compute passes to see sky tracks', cx, cy + 10);
     ctx.textAlign = 'left';
+    return;
   }
+
+  // Pass colors (selected vs ghost)
+  const PASS_COLORS = [
+    '#00d87a', // green  — selected
+    '#1e90e0', // blue
+    '#00d4ff', // cyan
+    '#ffa500', // amber
+    '#e040fb', // magenta
+    '#ff5252', // red
+  ];
+
+  const selIdx = Math.min(selectedPassIdx, passes.length - 1);
+  const now = new Date();
+
+  // ── Draw ghost tracks (all passes except selected, dimmed) ─
+  passes.slice(0, 8).forEach((pass, idx) => {
+    if (idx === selIdx || !pass.track || pass.track.length < 2) return;
+    const col = PASS_COLORS[idx % PASS_COLORS.length];
+    ctx.beginPath();
+    let started = false;
+    pass.track.forEach(pt => {
+      if (pt.el < 0) { started = false; return; }
+      const { x, y } = azelToXY(pt.az, pt.el, cx, cy, r);
+      started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), started = true);
+    });
+    ctx.strokeStyle = col.replace(')', ',0.18)').replace('rgb', 'rgba').replace('#', 'rgba(').replace('rgba(', 'rgba(');
+    // simpler: use hex with low opacity
+    ctx.strokeStyle = col + '30'; // ~19% opacity
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // ── Draw SELECTED pass track ─────────────────────────────
+  const sel = passes[selIdx];
+  if (sel && sel.track && sel.track.length >= 2) {
+    const col = PASS_COLORS[selIdx % PASS_COLORS.length];
+
+    // Segment 1: below 10° (dim) — AOS to TOT
+    ctx.beginPath();
+    let started = false;
+    sel.track.forEach(pt => {
+      if (pt.el < 0) { started = false; return; }
+      if (pt.el >= 10) { started = false; return; }  // stop at usable threshold
+      const { x, y } = azelToXY(pt.az, pt.el, cx, cy, r);
+      started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), started = true);
+    });
+    ctx.strokeStyle = col + '70';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Segment 2: above 10° (bright solid) — TOT to TOS
+    ctx.beginPath();
+    started = false;
+    sel.track.forEach(pt => {
+      if (pt.el < 10) { started = false; return; }
+      const { x, y } = azelToXY(pt.az, pt.el, cx, cy, r);
+      started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), started = true);
+    });
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // ── Direction arrow at ~60% along the usable segment ────
+    const usablePts = sel.track.filter(pt => pt.el >= 10);
+    if (usablePts.length >= 4) {
+      const arrowIdx = Math.floor(usablePts.length * 0.55);
+      const p1 = usablePts[arrowIdx - 1];
+      const p2 = usablePts[arrowIdx];
+      const xy1 = azelToXY(p1.az, p1.el, cx, cy, r);
+      const xy2 = azelToXY(p2.az, p2.el, cx, cy, r);
+      drawArrow(ctx, xy1.x, xy1.y, xy2.x, xy2.y, col, 9);
+    } else if (usablePts.length === 0 && sel.track.length >= 4) {
+      // Low-elevation pass — draw arrow on full track
+      const allAbove = sel.track.filter(pt => pt.el >= 0);
+      if (allAbove.length >= 4) {
+        const ai = Math.floor(allAbove.length * 0.55);
+        const p1 = allAbove[ai - 1], p2 = allAbove[ai];
+        const xy1 = azelToXY(p1.az, p1.el, cx, cy, r);
+        const xy2 = azelToXY(p2.az, p2.el, cx, cy, r);
+        drawArrow(ctx, xy1.x, xy1.y, xy2.x, xy2.y, col + '99', 8);
+      }
+    }
+
+    // ── AOS label ────────────────────────────────────────────
+    const aosPt = sel.track.find(pt => pt.el >= 0);
+    if (aosPt) {
+      const { x, y } = azelToXY(aosPt.az, aosPt.el, cx, cy, r);
+      // Hollow AOS circle
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Label
+      const aosUTC = new Date(sel.rise).toUTCString().slice(17, 22) + 'Z';
+      ctx.fillStyle = col;
+      ctx.font = 'bold 9px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('AOS', x, y - 9);
+      ctx.font = '8px JetBrains Mono, monospace';
+      ctx.fillText(aosUTC, x, y - 19);
+    }
+
+    // ── MAX EL label ─────────────────────────────────────────
+    const peakPt = sel.track.reduce((best, pt) => pt.el > best.el ? pt : best, { el: -999 });
+    if (peakPt.el > 0) {
+      const { x, y } = azelToXY(peakPt.az, peakPt.el, cx, cy, r);
+      // Star marker at peak
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Label offset to avoid overlap
+      const labelOff = peakPt.az < 180 ? 10 : -10;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 9px JetBrains Mono, monospace';
+      ctx.textAlign = peakPt.az < 180 ? 'left' : 'right';
+      ctx.fillText(`MAX ${Math.round(peakPt.el)}°`, x + labelOff, y - 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '8px JetBrains Mono, monospace';
+      ctx.fillText(`AZ ${Math.round(peakPt.az)}°`, x + labelOff, y + 6);
+    }
+
+    // ── LOS label ────────────────────────────────────────────
+    const losPt = [...sel.track].reverse().find(pt => pt.el >= 0);
+    if (losPt) {
+      const { x, y } = azelToXY(losPt.az, losPt.el, cx, cy, r);
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.strokeStyle = col + '99';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      const losUTC = new Date(sel.set).toUTCString().slice(17, 22) + 'Z';
+      ctx.fillStyle = col + 'bb';
+      ctx.font = 'bold 9px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('LOS', x, y + 17);
+      ctx.font = '8px JetBrains Mono, monospace';
+      ctx.fillText(losUTC, x, y + 27);
+    }
+
+    // ── Sat name label near center of track ─────────────────
+    const midPt = usablePts[Math.floor(usablePts.length * 0.25)] ||
+                  sel.track[Math.floor(sel.track.length * 0.25)];
+    if (midPt && midPt.el >= 0) {
+      const { x, y } = azelToXY(midPt.az, midPt.el, cx, cy, r);
+      ctx.fillStyle = col;
+      ctx.font = 'bold 10px JetBrains Mono, monospace';
+      ctx.textAlign = midPt.az < 270 ? 'left' : 'right';
+      const labelX = midPt.az < 270 ? x + 8 : x - 8;
+      ctx.fillText(sel.sat, labelX, y - 5);
+    }
+
+    // ── Live satellite dot (if pass is currently active) ─────
+    const isActive = now >= sel.rise && now <= sel.set;
+    if (isActive) {
+      const sat = FM_SATS.find(s => s.name === sel.sat);
+      if (sat && tleData[sat.norad]) {
+        try {
+          const satrec = window.satellite.twoline2satrec(tleData[sat.norad].line1, tleData[sat.norad].line2);
+          const posVel = window.satellite.propagate(satrec, now);
+          if (posVel.position) {
+            const gmst = window.satellite.gstime(now);
+            const look = window.satellite.ecfToLookAngles(
+              { latitude: STATION.lat * Math.PI / 180, longitude: STATION.lng * Math.PI / 180, height: 0 },
+              window.satellite.eciToEcf(posVel.position, gmst)
+            );
+            const liveEl = look.elevation * 180 / Math.PI;
+            const liveAz = look.azimuth  * 180 / Math.PI;
+            if (liveEl > 0) {
+              const { x, y } = azelToXY(liveAz, liveEl, cx, cy, r);
+              // Glow ring
+              const glow = ctx.createRadialGradient(x, y, 2, x, y, 12);
+              glow.addColorStop(0, col + 'cc');
+              glow.addColorStop(1, col + '00');
+              ctx.fillStyle = glow;
+              ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
+              // Satellite dot
+              ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
+              ctx.fillStyle = '#ffffff'; ctx.fill();
+              ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+            }
+          }
+        } catch(e) {}
+      }
+    }
+  }
+
+  // ── Legend: AZ/EL info box for selected pass ─────────────
+  if (passes.length > 0) {
+    const sel2 = passes[selIdx];
+    const aosAz = sel2.track ? (sel2.track.find(pt => pt.el >= 0) || {}).az : null;
+    const losAz = sel2.track ? ([...sel2.track].reverse().find(pt => pt.el >= 0) || {}).az : null;
+    const peakAz = sel2.track ? (sel2.track.reduce((b, p) => p.el > b.el ? p : b, { el: -999 })).az : null;
+
+    const azLabel = az => {
+      if (az === null || az === undefined) return '—';
+      const dirs8 = ['N','NE','E','SE','S','SW','W','NW','N'];
+      return `${Math.round(az)}° ${dirs8[Math.round(az / 45) % 8]}`;
+    };
+
+    const boxX = 8, boxY = H - 80, boxW = 130, boxH = 72;
+    ctx.fillStyle = 'rgba(5,10,15,0.82)';
+    ctx.strokeStyle = 'rgba(30,144,224,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, 4);
+    ctx.fill(); ctx.stroke();
+
+    ctx.font = 'bold 8px JetBrains Mono, monospace';
+    ctx.fillStyle = PASS_COLORS[selIdx % PASS_COLORS.length];
+    ctx.textAlign = 'left';
+    ctx.fillText(sel2.sat, boxX + 6, boxY + 13);
+
+    ctx.fillStyle = 'rgba(150,200,230,0.7)';
+    ctx.font = '8px JetBrains Mono, monospace';
+    ctx.fillText(`AOS: ${azLabel(aosAz)}`, boxX + 6, boxY + 26);
+    ctx.fillText(`MAX: ${azLabel(peakAz)}  ${Math.round(sel2.maxEl)}° EL`, boxX + 6, boxY + 38);
+    ctx.fillText(`LOS: ${azLabel(losAz)}`, boxX + 6, boxY + 50);
+
+    // Direction of travel indicator
+    const dirStr = (() => {
+      if (aosAz === null || losAz === null) return '';
+      const delta = ((losAz - aosAz) + 360) % 360;
+      if (delta < 30 || delta > 330) return 'NEARLY STATIONARY';
+      if (delta < 180) return `${azLabel(aosAz)} → ${azLabel(losAz)}`;
+      return `${azLabel(aosAz)} → ${azLabel(losAz)}`;
+    })();
+    ctx.fillStyle = 'rgba(0,212,255,0.6)';
+    ctx.font = '7px JetBrains Mono, monospace';
+    ctx.fillText(dirStr, boxX + 6, boxY + 63);
+  }
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 }
 
 // ========================================================
