@@ -8,6 +8,7 @@ const AMSAT_BASE = "https://www.amsat.org/status/api/v1/sat_info.php";
 
 // CORRECTED FM voice satellite names — AMSAT API requires exact _[MODE] suffix
 // Verified against https://www.amsat.org/status/ select options (April 2026)
+// Voice FM only — RS-38S and RS95S removed April 2026 (no active FM voice on SatNOGS)
 const FM_SAT_NAMES = [
   "SO-50_[FM]",
   "AO-91_[FM]",

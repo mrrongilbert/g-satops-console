@@ -14,16 +14,16 @@ const AMSAT_TLE_URL = "https://www.amsat.org/tle/current/nasabare.txt";
 const SATNOGS_TLE_URL = "https://db.satnogs.org/api/tle/?norad_cat_id=";
 
 // Curated FM satellite list with VERIFIED correct NORAD IDs
+// Voice FM only — RS-38S (57189) and RS95S (67291) removed April 2026
+// (SatNOGS confirms: no active FM voice transceivers on those NORADs)
 const FM_SAT_NORADS = [
   27607,  // SO-50     (SAUDISAT 1C)
   43017,  // AO-91     (Fox-1B)
-  40931,  // IO-86     (LAPAN-A2) — correct NORAD, not 39684
+  40931,  // IO-86     (LAPAN-A2)
   25544,  // ISS
   43678,  // PO-101    (Diwata-2)
-  61781,  // AO-123    — correct NORAD, not 59561
-  63492,  // SO-125    (HADES-ICM) — correct NORAD, not 57167
-  67291,  // RS95S     (QMR-KWT-2) — correct NORAD, not 59052
-  57189,  // RS-38S
+  61781,  // AO-123
+  63492,  // SO-125    (HADES-ICM)
 ];
 
 /**

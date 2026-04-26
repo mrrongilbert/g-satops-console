@@ -1893,17 +1893,19 @@ const STATION = {
 
 // Master list of voice FM satellites compatible with IC-9700 + M2 LEO Pack
 // (uplink 144/146 MHz, downlink 435-438 MHz range — within LEO Pack specs)
-// NORAD IDs verified April 2026 — IO-86=40931(LAPAN-A2), AO-123=61781, SO-125=63492(HADES-ICM), RS95S=67291, RS-38S=57189
+// FM VOICE ONLY — verified vs SatNOGS April 2026
+// RS-38S (57189) REMOVED: GMSK telemetry + SSTV only, no FM voice transceiver
+// RS95S  (67291) REMOVED: FM transponder alive=false/inactive, only GMSK+SSTV active
+// AO-123 (61781) FREQUENCIES CORRECTED: UL=145.850, DL=435.400 per SatNOGS
+// SO-125 (63492) FREQUENCIES CORRECTED: UL=145.875, DL=436.666 per SatNOGS (FM alive=True)
 const FM_SATS = [
-  { name: "SO-50",      norad: 27607, dn: 436.795, up: 145.850, tone: "67.0 Hz",  mode: "FM", csn: "SO-50",      amsat: "SO-50",    notes: "Most active, always try first" },
-  { name: "AO-91",      norad: 43017, dn: 145.960, up: 435.250, tone: "67.0 Hz",  mode: "FM", csn: "AO-91",      amsat: "AO-91",    notes: "Very active, easy to work" },
-  { name: "IO-86",      norad: 40931, dn: 435.880, up: 145.880, tone: "88.5 Hz",  mode: "FM", csn: "IO-86",      amsat: "IO-86",    notes: "LAPAN-A2 — active OSCAR" },
-  { name: "ISS (FM)",   norad: 25544, dn: 437.800, up: 145.990, tone: "NONE",     mode: "FM", csn: "ISS",        amsat: "ISS",      notes: "145.990 up, 437.800 dn, no CTCSS" },
-  { name: "PO-101",     norad: 43678, dn: 145.900, up: 437.500, tone: "141.3 Hz", mode: "FM", csn: "PO-101",     amsat: "PO-101",   notes: "Diwata-2, check schedule" },
-  { name: "AO-123",     norad: 61781, dn: 436.400, up: 145.900, tone: "NONE",     mode: "FM", csn: "AO-123",     amsat: "AO-123",   notes: "Check current status" },
-  { name: "SO-125",     norad: 63492, dn: 436.325, up: 145.900, tone: "NONE",     mode: "FM", csn: "SO-125",     amsat: "SO-125",   notes: "HADES-ICM — check status" },
-  { name: "RS-38S",     norad: 57189, dn: 435.640, up: 145.850, tone: "NONE",     mode: "FM", csn: "RS-38S",     amsat: null,       notes: "ROSCOSMOS FM repeater" },
-  { name: "RS95S",      norad: 67291, dn: 435.640, up: 145.850, tone: "NONE",     mode: "FM", csn: "RS95S",      amsat: "RS95S",    notes: "QMR-KWT-2 — ROSCOSMOS FM" },
+  { name: "SO-50",      norad: 27607, dn: 436.795, up: 145.850, tone: "67.0 Hz",  mode: "FM", csn: "SO-50",   amsat: "SO-50",  notes: "Most active, always try first" },
+  { name: "AO-91",      norad: 43017, dn: 145.960, up: 435.250, tone: "67.0 Hz",  mode: "FM", csn: "AO-91",   amsat: "AO-91",  notes: "Very active, easy to work" },
+  { name: "IO-86",      norad: 40931, dn: 435.880, up: 145.880, tone: "88.5 Hz",  mode: "FM", csn: "IO-86",   amsat: "IO-86",  notes: "LAPAN-A2 — active OSCAR" },
+  { name: "ISS (FM)",   norad: 25544, dn: 437.800, up: 145.990, tone: "67.0 Hz",  mode: "FM", csn: "ISS",     amsat: "ISS",    notes: "V/U FM voice repeater, CTCSS 67.0 Hz" },
+  { name: "PO-101",     norad: 43678, dn: 145.900, up: 437.500, tone: "141.3 Hz", mode: "FM", csn: "PO-101",  amsat: "PO-101", notes: "Diwata-2, check schedule" },
+  { name: "AO-123",     norad: 61781, dn: 435.400, up: 145.850, tone: "NONE",     mode: "FM", csn: "AO-123",  amsat: "AO-123", notes: "Frequencies corrected per SatNOGS" },
+  { name: "SO-125",     norad: 63492, dn: 436.666, up: 145.875, tone: "NONE",     mode: "FM", csn: "SO-125",  amsat: "SO-125", notes: "HADES-ICM, FM alive per SatNOGS" },
 ];
 
 // AMSAT status satellite names for API queries (proxy strips _[FM] suffix in response keys)
