@@ -43,6 +43,12 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/api/health"
+  to = "/.netlify/functions/health-check"
+  status = 200
+  force = true
+
 # SPA fallback — serve index.html for all unmatched routes
 [[redirects]]
   from = "/*"

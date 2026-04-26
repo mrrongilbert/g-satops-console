@@ -231,8 +231,14 @@
       background: currentColor;
       animation: pulse-dot 2s ease-in-out infinite;
     }
+    .status-chip.red {
+      background: var(--color-red-bg);
+      border-color: var(--color-red-dim);
+      color: var(--color-red);
+    }
     .status-chip.green .status-dot { box-shadow: 0 0 6px var(--color-green); }
     .status-chip.amber .status-dot { box-shadow: 0 0 6px var(--color-amber); animation-duration: 1s; }
+    .status-chip.red .status-dot { box-shadow: 0 0 6px var(--color-red); animation-duration: 0.5s; }
 
     @keyframes pulse-dot {
       0%, 100% { opacity: 1; }
@@ -1174,6 +1180,10 @@
         <span class="status-dot"></span>
         AMSAT LIVE
       </div>
+      <div class="status-chip blue" id="watchdog-chip" title="Click for system health details" onclick="toggleHealthPanel()" style="cursor:pointer;">
+        <span class="status-dot"></span>
+        SYS CHECK
+      </div>
     </div>
 
     <div class="topbar-clock">
@@ -1273,6 +1283,42 @@
     @keyframes rr-fadein { from { opacity:0; transform:scale(0.97); } to { opacity:1; transform:scale(1); } }
     @keyframes rr-pulse  { from { text-shadow:0 0 20px #ff2244,0 0 40px #ff224488; } to { text-shadow:0 0 40px #ff2244,0 0 80px #ff2244cc,0 0 120px #ff224444; } }
   </style>
+
+  <!-- ========================================
+       SYSTEM HEALTH PANEL (watchdog)
+  ======================================== -->
+  <div id="health-panel" style="
+    display:none;
+    position:fixed;
+    top:58px; right:12px;
+    width:340px;
+    z-index:9000;
+    background:var(--color-surface-2,#0d1f33);
+    border:1px solid rgba(30,144,224,0.35);
+    border-radius:6px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.7);
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    color:var(--color-text);
+    overflow:hidden;
+  ">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(30,144,224,0.2);background:rgba(0,0,0,0.3);">
+      <span style="font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:0.1em;color:var(--color-cyan);">&#128268; SYSTEM HEALTH</span>
+      <button onclick="toggleHealthPanel()" style="background:none;border:none;color:var(--color-text-faint);cursor:pointer;font-size:14px;line-height:1;">&#x2715;</button>
+    </div>
+    <div id="health-panel-body" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+      <div style="color:var(--color-text-faint);text-align:center;">Checking...</div>
+    </div>
+    <div style="padding:8px 14px;border-top:1px solid rgba(30,144,224,0.15);display:flex;justify-content:space-between;align-items:center;">
+      <span id="health-last-check" style="color:var(--color-text-faint);font-size:9px;">Never checked</span>
+      <button onclick="runHealthCheck(true)" style="
+        font-family:'Orbitron',monospace;font-size:8px;font-weight:700;
+        padding:4px 10px;background:transparent;
+        border:1px solid rgba(30,144,224,0.4);color:var(--color-primary);
+        border-radius:3px;cursor:pointer;letter-spacing:0.08em;
+      ">&#8635; CHECK NOW</button>
+    </div>
+  </div>
 
   <!-- ========================================
        TAB NAV
@@ -3178,25 +3224,7 @@ function init() {
   renderIc9700Settings();
   loadAmsatReports();
   loadTLEs();
-
-  // ─── Auto-refresh intervals ───────────────────────────
-  // AMSAT observer reports: every 5 minutes
-  setInterval(() => {
-    console.log('[Auto-refresh] AMSAT reports');
-    loadAmsatReports();
-  }, 300000);
-
-  // TLE data: every 24 hours
-  setInterval(() => {
-    console.log('[Auto-refresh] TLEs');
-    loadTLEs();
-  }, 86400000);
-
-  // Pass prediction: every 10 minutes
-  setInterval(() => {
-    console.log('[Auto-refresh] Pass prediction');
-    computePasses();
-  }, 600000);
+  startWatchdog();
 
   // Redraw canvas on resize
   window.addEventListener('resize', () => {
@@ -3205,6 +3233,319 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ═══════════════════════════════════════════
+// 🛡️ WATCHDOG ENGINE
+// Self-healing data pipeline monitor for SatOps GCC.
+//
+// What it watches:
+//   • TLE data staleness (>6h = warn, >24h = recover)
+//   • AMSAT report freshness (>10min = refresh early)
+//   • Pass prediction age (>12min = recompute)
+//   • satellite.js CDN availability
+//   • Tab visibility (pause timers when hidden, rehydrate on focus)
+//   • Server-side upstream health (/api/health) every 10 min
+//   • Retry with exponential backoff on any failure
+//   • Recovery counter displayed in SYS chip
+// ═══════════════════════════════════════════
+
+const WD = {
+  // ── State ──────────────────────────────────────────
+  lastTleLoad:       null,   // Date of last successful TLE fetch
+  lastAmsatLoad:     null,   // Date of last successful AMSAT fetch
+  lastPassCompute:   null,   // Date of last pass computation
+  lastHealthCheck:   null,   // Date of last /api/health call
+  lastHealthResult:  null,   // Most recent health response
+  tleRetryCount:     0,
+  amsatRetryCount:   0,
+  recoveryCount:     0,      // Times watchdog triggered an auto-recovery
+  tabHidden:         false,  // Is the browser tab in the background?
+  healthCheckPending: false,
+
+  // ── Schedules (ms) ─────────────────────────────────
+  TLE_REFRESH_MS:      6 * 3600 * 1000,   // Refresh TLEs every 6h
+  TLE_STALE_MS:       24 * 3600 * 1000,   // Force-reload if >24h
+  AMSAT_REFRESH_MS:       5 * 60 * 1000,  // AMSAT reports every 5min
+  AMSAT_STALE_MS:        15 * 60 * 1000,  // Warn if >15min old
+  PASS_REFRESH_MS:       10 * 60 * 1000,  // Recompute passes every 10min
+  PASS_STALE_MS:         15 * 60 * 1000,  // Warn if >15min old
+  HEALTH_CHECK_MS:       10 * 60 * 1000,  // /api/health every 10min
+  WATCHDOG_TICK_MS:          30 * 1000,   // Watchdog evaluates every 30s
+  MAX_RETRY_BACKOFF_MS:  10 * 60 * 1000,  // Cap exponential backoff at 10min
+};
+
+// Called once by init()
+function startWatchdog() {
+  // Record initial load times right now (data is being fetched in init)
+  WD.lastTleLoad     = new Date();
+  WD.lastAmsatLoad   = new Date();
+  WD.lastPassCompute = new Date();
+
+  // ── Tab visibility: pause refresh when hidden, rehydrate on focus ──
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      WD.tabHidden = true;
+      console.log('[Watchdog] Tab hidden — pausing background work');
+    } else {
+      WD.tabHidden = false;
+      console.log('[Watchdog] Tab visible — checking data freshness');
+      wdCheckFreshness(true); // immediate recheck on focus
+    }
+  });
+
+  // ── Main watchdog tick ──────────────────────────────
+  setInterval(() => {
+    if (!WD.tabHidden) wdCheckFreshness(false);
+  }, WD.WATCHDOG_TICK_MS);
+
+  // ── Server-side health check ────────────────────────
+  // First check 60s after load (give proxies time to warm up)
+  setTimeout(() => runHealthCheck(false), 60000);
+  setInterval(() => {
+    if (!WD.tabHidden) runHealthCheck(false);
+  }, WD.HEALTH_CHECK_MS);
+
+  console.log('[Watchdog] Started — tick every 30s, health check every 10min');
+}
+
+// ── Freshness evaluator ────────────────────────────────
+function wdCheckFreshness(forceRehydrate) {
+  const now = Date.now();
+
+  // — TLE staleness ————————————————————————
+  const tleAge = WD.lastTleLoad ? now - WD.lastTleLoad.getTime() : Infinity;
+  if (tleAge > WD.TLE_STALE_MS || forceRehydrate && tleAge > WD.TLE_REFRESH_MS) {
+    const reason = forceRehydrate ? 'tab refocus' : 'stale >24h';
+    console.log(`[Watchdog] TLE reload triggered (${reason}, age=${Math.round(tleAge/60000)}min)`);
+    WD.recoveryCount++;
+    wdLoadTLEsWithRetry();
+  } else if (tleAge > WD.TLE_REFRESH_MS) {
+    // Due for normal refresh
+    wdLoadTLEsWithRetry();
+  }
+
+  // — AMSAT staleness ———————————————————————
+  const amsatAge = WD.lastAmsatLoad ? now - WD.lastAmsatLoad.getTime() : Infinity;
+  if (amsatAge > WD.AMSAT_STALE_MS || forceRehydrate && amsatAge > WD.AMSAT_REFRESH_MS) {
+    const reason = forceRehydrate ? 'tab refocus' : 'stale >15min';
+    console.log(`[Watchdog] AMSAT reload triggered (${reason}, age=${Math.round(amsatAge/60000)}min)`);
+    if (forceRehydrate) WD.recoveryCount++;
+    wdLoadAmsatWithRetry();
+  } else if (amsatAge > WD.AMSAT_REFRESH_MS) {
+    wdLoadAmsatWithRetry();
+  }
+
+  // — Pass prediction staleness —————————————————
+  const passAge = WD.lastPassCompute ? now - WD.lastPassCompute.getTime() : Infinity;
+  if ((passAge > WD.PASS_STALE_MS || forceRehydrate && passAge > WD.PASS_REFRESH_MS) && window.tleParsed) {
+    console.log(`[Watchdog] Pass recompute triggered (age=${Math.round(passAge/60000)}min)`);
+    if (passAge > WD.PASS_STALE_MS) WD.recoveryCount++;
+    computePasses();
+    WD.lastPassCompute = new Date();
+  }
+
+  wdUpdateChip();
+}
+
+// ── TLE loader with exponential-backoff retry ────────────
+let _tleRetryTimer = null;
+function wdLoadTLEsWithRetry(attempt = 0) {
+  clearTimeout(_tleRetryTimer);
+  loadTLEs()
+    .then(() => {
+      WD.lastTleLoad    = new Date();
+      WD.tleRetryCount  = 0;
+      wdUpdateChip();
+      console.log('[Watchdog] TLE load OK');
+    })
+    .catch(err => {
+      WD.tleRetryCount = attempt + 1;
+      const backoff = Math.min(30000 * Math.pow(2, attempt), WD.MAX_RETRY_BACKOFF_MS);
+      console.warn(`[Watchdog] TLE load failed (attempt ${attempt + 1}), retry in ${backoff/1000}s:`, err.message);
+      wdUpdateChip();
+      _tleRetryTimer = setTimeout(() => wdLoadTLEsWithRetry(attempt + 1), backoff);
+    });
+}
+
+// ── AMSAT loader with exponential-backoff retry ────────
+ let _amsatRetryTimer = null;
+function wdLoadAmsatWithRetry(attempt = 0) {
+  clearTimeout(_amsatRetryTimer);
+  loadAmsatReports()
+    .then(() => {
+      WD.lastAmsatLoad   = new Date();
+      WD.amsatRetryCount = 0;
+      wdUpdateChip();
+      console.log('[Watchdog] AMSAT load OK');
+    })
+    .catch(err => {
+      WD.amsatRetryCount = attempt + 1;
+      const backoff = Math.min(30000 * Math.pow(2, attempt), WD.MAX_RETRY_BACKOFF_MS);
+      console.warn(`[Watchdog] AMSAT load failed (attempt ${attempt + 1}), retry in ${backoff/1000}s:`, err.message);
+      wdUpdateChip();
+      _amsatRetryTimer = setTimeout(() => wdLoadAmsatWithRetry(attempt + 1), backoff);
+    });
+}
+
+// ── Server-side health check ────────────────────────
+async function runHealthCheck(userInitiated) {
+  if (WD.healthCheckPending) return;
+  WD.healthCheckPending = true;
+
+  if (userInitiated) {
+    const body = document.getElementById('health-panel-body');
+    if (body) body.innerHTML = '<div style="color:var(--color-text-faint);text-align:center;padding:8px;">&#8635; Checking...</div>';
+  }
+
+  try {
+    const resp = await fetch('/api/health', {
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    WD.lastHealthCheck  = new Date();
+    WD.lastHealthResult = data;
+    wdRenderHealthPanel(data);
+    wdUpdateChip();
+
+    // If a source is down, trigger immediate recovery for that pipeline
+    if (data.sources.amsat_tle?.status !== 'ok' || data.sources.satnogs_tle?.status !== 'ok') {
+      console.warn('[Watchdog] Health check: TLE source degraded — forcing TLE reload');
+      WD.recoveryCount++;
+      wdLoadTLEsWithRetry();
+    }
+    if (data.sources.amsat_status?.status !== 'ok') {
+      console.warn('[Watchdog] Health check: AMSAT status degraded — forcing AMSAT reload');
+      WD.recoveryCount++;
+      wdLoadAmsatWithRetry();
+    }
+  } catch(err) {
+    console.warn('[Watchdog] Health check failed:', err.message);
+    WD.lastHealthResult = { overall: 'unknown', error: err.message };
+    wdRenderHealthPanel(WD.lastHealthResult);
+    wdUpdateChip();
+  } finally {
+    WD.healthCheckPending = false;
+    const el = document.getElementById('health-last-check');
+    if (el) el.textContent = `Last check: ${new Date().toUTCString().slice(17,22)} UTC`;
+  }
+}
+
+// ── Render health panel ──────────────────────────────
+function wdRenderHealthPanel(data) {
+  const body = document.getElementById('health-panel-body');
+  if (!body) return;
+
+  const statusIcon = { ok: '✅', degraded: '⚠️', down: '❌', unknown: '❓' };
+  const statusColor = { ok: 'var(--color-green)', degraded: 'var(--color-amber)', down: '#ff4455', unknown: 'var(--color-text-faint)' };
+
+  if (data.error && !data.sources) {
+    body.innerHTML = `<div style="color:#ff4455;text-align:center;">❌ Cannot reach /api/health<br><small style="color:var(--color-text-faint);">${data.error}</small></div>`;
+    return;
+  }
+
+  const srcRows = Object.entries(data.sources || {}).map(([id, src]) => {
+    const ic = statusIcon[src.status] || '❓';
+    const col = statusColor[src.status] || 'inherit';
+    const lat = src.latency_ms ? `<span style="color:var(--color-text-faint);">${src.latency_ms}ms</span>` : '';
+    return `
+      <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <span style="flex-shrink:0;width:16px;">${ic}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="color:${col};font-weight:700;font-size:10px;">${src.label || id} ${lat}</div>
+          <div style="color:var(--color-text-faint);font-size:9px;margin-top:2px;word-break:break-word;">${src.detail || ''}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const warnRows = (data.warnings || []).map(w =>
+    `<div style="color:var(--color-amber);font-size:9px;padding:3px 0;">&#9888; ${w}</div>`
+  ).join('');
+
+  const tleAgeStr = WD.lastTleLoad ? `${Math.round((Date.now() - WD.lastTleLoad.getTime()) / 60000)}min ago` : '—';
+  const amsatAgeStr = WD.lastAmsatLoad ? `${Math.round((Date.now() - WD.lastAmsatLoad.getTime()) / 60000)}min ago` : '—';
+  const passAgeStr = WD.lastPassCompute ? `${Math.round((Date.now() - WD.lastPassCompute.getTime()) / 60000)}min ago` : '—';
+
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-weight:700;color:${statusColor[data.overall] || 'inherit'};font-size:11px;">
+        ${statusIcon[data.overall] || '❓'} OVERALL: ${(data.overall || 'UNKNOWN').toUpperCase()}
+      </span>
+      <span style="color:var(--color-text-faint);font-size:9px;">🔄 ${WD.recoveryCount} auto-recoveries</span>
+    </div>
+    ${srcRows}
+    ${warnRows ? `<div style="margin-top:6px;">${warnRows}</div>` : ''}
+    <div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:3px;">
+      <div style="color:var(--color-text-faint);font-size:9px;letter-spacing:0.08em;">CLIENT PIPELINE</div>
+      <div style="display:flex;justify-content:space-between;"><span>TLEs loaded:</span><span style="color:var(--color-cyan);">${tleAgeStr}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>AMSAT reports:</span><span style="color:var(--color-cyan);">${amsatAgeStr}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>Pass computed:</span><span style="color:var(--color-cyan);">${passAgeStr}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>TLE retries:</span><span style="color:${WD.tleRetryCount > 0 ? 'var(--color-amber)' : 'var(--color-green)'}">${WD.tleRetryCount}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>AMSAT retries:</span><span style="color:${WD.amsatRetryCount > 0 ? 'var(--color-amber)' : 'var(--color-green)'}">${WD.amsatRetryCount}</span></div>
+    </div>`;
+}
+
+// ── Update the SYS chip in the topbar ─────────────────────
+function wdUpdateChip() {
+  const chip = document.getElementById('watchdog-chip');
+  if (!chip) return;
+
+  const h = WD.lastHealthResult;
+  const overall = h ? h.overall : 'unknown';
+  const retrying = WD.tleRetryCount > 0 || WD.amsatRetryCount > 0;
+
+  chip.className = 'status-chip ' + (
+    overall === 'ok' && !retrying ? 'green' :
+    overall === 'down'            ? 'red'   : 'amber'
+  );
+
+  const label = overall === 'ok' && !retrying
+    ? 'SYS OK'
+    : retrying
+    ? `RETRY ×${WD.tleRetryCount + WD.amsatRetryCount}`
+    : overall === 'down'
+    ? 'SYS DOWN'
+    : 'SYS WARN';
+
+  chip.innerHTML = `<span class="status-dot"></span>${label}`;
+}
+
+// ── Toggle health panel visibility ────────────────────
+function toggleHealthPanel() {
+  const panel = document.getElementById('health-panel');
+  if (!panel) return;
+  const isVisible = panel.style.display !== 'none';
+  panel.style.display = isVisible ? 'none' : 'block';
+  if (!isVisible) {
+    // Always refresh the panel content when opening
+    if (WD.lastHealthResult) wdRenderHealthPanel(WD.lastHealthResult);
+    // Run a fresh check if last one was >5min ago
+    const checkAge = WD.lastHealthCheck ? Date.now() - WD.lastHealthCheck.getTime() : Infinity;
+    if (checkAge > 300000) runHealthCheck(true);
+  }
+}
+
+// Also update WD timestamps when the underlying loaders succeed
+// Patch loadTLEs and loadAmsatReports to notify watchdog
+const _origLoadTLEs = loadTLEs;
+loadTLEs = async function(...args) {
+  try {
+    await _origLoadTLEs(...args);
+    WD.lastTleLoad = new Date();
+    WD.tleRetryCount = 0;
+    wdUpdateChip();
+  } catch(e) { throw e; }
+};
+
+const _origLoadAmsat = loadAmsatReports;
+loadAmsatReports = async function(...args) {
+  try {
+    await _origLoadAmsat(...args);
+    WD.lastAmsatLoad = new Date();
+    WD.amsatRetryCount = 0;
+    wdUpdateChip();
+  } catch(e) { throw e; }
+};
 
 // ═══════════════════════════════════════════
 // 🎵 EASTER EGG: Rick Roll (classified)
